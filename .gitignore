@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# Model Weights
+*.pth
+*.pt
+*.ckpt
+
+# Logs
+*.log
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+datasets/visual_genome/VG_100K/
+datasets/visual_genome/VG_100K_2/
