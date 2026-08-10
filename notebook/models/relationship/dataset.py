@@ -171,12 +171,17 @@ class RelationshipDataset(Dataset):
         self,
         scene: Scene,
         subject_index: int,
-        object_index: int
+        object_index: int,
     ):
+        subject = next(
+            obj for obj in scene.objects
+            if obj.object_index == subject_index
+        )
 
-        subject = scene.objects[subject_index]
-
-        obj = scene.objects[object_index]
+        obj = next(
+            obj for obj in scene.objects
+            if obj.object_index == object_index
+        )
 
         return subject, obj
 
