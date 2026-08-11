@@ -275,7 +275,7 @@ class RelationshipDataset(Dataset):
             ),
 
             "target": torch.tensor(
-                predicate_index,
+                predicate_index-1,
                 dtype=torch.long,
             ),
         }
