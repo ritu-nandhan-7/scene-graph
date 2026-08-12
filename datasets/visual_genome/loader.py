@@ -26,9 +26,15 @@ from .models import (
 
 class VisualGenomeLoader:
 
-    def __init__(self, dataset_root):
+    def __init__(self, dataset_root,image_root=None):
 
         self.dataset_root = Path(dataset_root)
+        
+        self.image_root = (
+            Path(image_root)
+            if image_root is not None
+            else self.dataset_root
+        )
 
         # ---------- Dataset paths ----------
 
@@ -66,7 +72,7 @@ class VisualGenomeLoader:
         folder = Path(url).parent.name
         filename = Path(url).name
 
-        path = self.dataset_root / folder / filename
+        path = self.image_root / folder / filename
 
         return ImageInfo(
             image_index=image_idx,
