@@ -163,15 +163,8 @@ class VisualGenomeLoader:
         """
         first_rel = int(self.h5["img_to_first_rel"][image_idx])
         last_rel = int(self.h5["img_to_last_rel"][image_idx])
-        print(
-            "DEBUG:",
-            image_idx,
-            "first_rel =", first_rel,
-            "last_rel =", last_rel
-        )
 
         if first_rel == -1 or last_rel == -1:
-            print("DEBUG: RETURNING EMPTY RELATIONSHIPS")
             return []
 
         relationships = []
