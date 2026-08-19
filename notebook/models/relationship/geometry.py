@@ -69,18 +69,23 @@ def crop_union_region(
     union_box: BoundingBox,
 ):
 
-    x1, y1, x2, y2 = bbox_to_xyxy(union_box)
-
     width, height = image.size
 
-    x1 = max(0, int(round(x1)))
-    y1 = max(0, int(round(y1)))
+    x1, y1, x2, y2 = union_box
 
-    x2 = min(width, int(round(x2)))
-    y2 = min(height, int(round(y2)))
+    x1 = max(0, min(width, int(round(x1))))
+    y1 = max(0, min(height, int(round(y1))))
+    x2 = max(0, min(width, int(round(x2))))
+    y2 = max(0, min(height, int(round(y2))))
+
+    # Invalid / zero-area crop
+    if x2 <= x1 or y2 <= y1:
+        raise ValueError(
+            f"Invalid crop box: {(x1, y1, x2, y2)} "
+            f"for image size {image.size}"
+        )
 
     return image.crop((x1, y1, x2, y2))
-
 def bbox_relative_to_crop(
     bbox: BoundingBox,
     crop_box: BoundingBox,
