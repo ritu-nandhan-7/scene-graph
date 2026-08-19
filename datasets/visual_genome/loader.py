@@ -91,8 +91,7 @@ class VisualGenomeLoader:
         return Image.open(image_info.path)
 
     def _scale_box(self, box, image_info):
-        """
-        Convert a Visual Genome 1024-scale bounding box
+        """Convert a Visual Genome 1024-scale bounding box
         into original image coordinates.
 
         Input:
@@ -104,19 +103,22 @@ class VisualGenomeLoader:
 
         cx, cy, width, height = box
 
-        scale = 1024 / max(image_info.width, image_info.height)
+        x_scale = 1024 / image_info.width
+        y_scale = 1024 / image_info.height
 
-        cx /= scale
-        cy /= scale
-        width /= scale
-        height /= scale
+        cx /= x_scale
+        cy /= y_scale
+
+        width /= x_scale
+        height /= y_scale
 
         return BoundingBox(
             cx=float(cx),
             cy=float(cy),
             width=float(width),
-            height=float(height)
+            height=float(height),
         )
+    
     def _build_objects(self, image_idx, image_info):
         """
         Builds all objects belonging to one image.
