@@ -71,7 +71,7 @@ def crop_union_region(
 
     width, height = image.size
 
-    x1, y1, x2, y2 = union_box
+    x1, y1, x2, y2 = union_box.as_xyxy()
 
     x1 = max(0, min(width, int(round(x1))))
     y1 = max(0, min(height, int(round(y1))))
