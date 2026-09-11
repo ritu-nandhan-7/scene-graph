@@ -36,3 +36,5 @@ datasets/visual_genome/visual_genome_images/
 
 datasets/visual_genome/VG_100K_2.zip
 datasets/visual_genome/VG_100K.zip
+
+notebook/models/preprocessed_cache/
