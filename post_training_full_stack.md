@@ -3359,3 +3359,329 @@ No Docker, no Dockerfile, no deployments, no ML/frontend changes.
 ================================================================================
 END OF ENTRY 14 - PHASE 3 (RUNTIME DEPENDENCIES)
 ================================================================================
+
+================================================================================
+DEPLOYMENT DIARY - ENTRY 15: MODEL / DATA ARTIFACT DEPLOYMENT STRATEGY
+(PHASE 4 - investigative only)
+Date: 2026-09-24. Verified start state: HEAD e4039ae == origin/main, clean
+tree. NO source/ML/frontend/requirements changes; NO Dockerfile; NO Docker;
+NO deploys; offline flags untouched. Evidence: direct inspection of the
+production code path + staged fresh-machine simulation on WSL2 Ubuntu-24.04 /
+Python 3.12 (fresh venv from requirements-deploy.txt, empty HOME, no caches,
+repo-only, backend default offline flags).
+================================================================================
+
+1. Complete runtime artifact inventory (rows verified from code; sizes
+   measured on the live filesystem)
+
+| Artifact | Required? | Current source/path | Approx size | How loaded | Needed at |
+|---|---|---|---:|---|---|
+| notebook/models/yolov8s-world.pt | YES | repo-tracked; backend REPO_ROOT/notebook/models | 25.91 MB | YOLOWorld(path); attempt_download_asset returns immediately when file exists (no network) | startup |
+| notebook/models/best_full_fusion_30epoch.pt | YES | repo-tracked, same dir | 2.36 MB | torch.load(map_location, weights_only=False)["model_state_dict"] -> strict load_state_dict | startup |
+| datasets/visual_genome/VG-SGG.h5 | YES (startup only; never read per-request) | repo-tracked | 67.61 MB | h5py.File(..., "r") unconditionally in VisualGenomeLoader.__init__ | startup |
+| datasets/visual_genome/VG-SGG-dicts.json | YES (actually consumed) | repo-tracked | ~0.01 MB | json.load -> label_to_idx (YOLO vocabulary) + predicate decode maps | startup |
+| datasets/visual_genome/image_data.json | YES (startup only; never read per-request) | repo-tracked | 16.80 MB | json.load unconditionally in VisualGenomeLoader.__init__ | startup |
+| PATH A: ViT-B-32.pt (OpenAI CLIP, ultralytics fork format) | YES | OUTSIDE repo: Windows = C:\Users\psytr\weights\clip (settings.json); fresh Linux = <cwd>/weights/clip (relative default) | 337.6 MB (353,976,522 B) | clip.load("ViT-B/32", download_root=WEIGHTS_DIR/"clip"); SHA-256 verified; downloads from openaipublic.azureedge.net only if missing/mismatched | startup (set_classes) |
+| PATH B: open_clip_model.safetensors | YES | OUTSIDE repo: HF hub cache models--timm--vit_base_patch32_clip_224.openai | 577 MB (605,143,284 B) | open_clip tag "openai" -> hf_hub_download; served locally under HF_HUB_OFFLINE=1 | startup (ImageEncoder) |
+| Python package clip (git+https://github.com/ultralytics/CLIP.git) | YES (imported at startup by ultralytics) | dev .venv only; NOT in requirements-deploy.txt | ~1.4 MB wheel | `import clip` in ultralytics/nn/text_model.py; if absent, ultralytics auto pip-installs it AT STARTUP (git + network + pip) | startup |
+| pip deps of requirements-deploy.txt | YES | PyPI + download.pytorch.org/whl/cpu | ~1.4 GB installed | pip install | build time |
+| datasets/visual_genome/zeroshot_triplet.pytorch | NO (historical) | repo-tracked | 0.07 MB | not imported by production code | - |
+| datasets/original/VG150_curated.zip | NO (historical, kept per git constraint) | repo-tracked | 22.47 MB | never opened by code | - |
+| VG_100K/, VG_100K_2/, VG_100K.zip, VG_100K_2.zip | NO | local only, gitignored | 43.8 GB total | images read only by loader.load_scene(); analyze() never calls it | - |
+| notebook/models/preprocessed_cache/ | NO | local only, gitignored | 1,708 MB | training only | - |
+
+GET /health and POST /analyze need NO artifact beyond the startup set:
+requests only decode the uploaded image in memory (20 MB cap) and reuse the
+singleton built by lifespan -> get_pipeline().
+
+2. YOLO-World weight strategy
+   - Exact path: scene_graph/detector.py passes model_path straight to
+     YOLOWorld(); backend supplies REPO_ROOT/notebook/models/yolov8s-world.pt
+     -> REPO-RELATIVE, repo-tracked since Phase 1 (.gitignore exception).
+   - Download behavior: attempt_download_asset() checks file.exists() FIRST
+     and returns it -> ZERO network when the tracked file is present (proven
+     live: P2 started the detector with no download attempt).
+   - HF / Git LFS: not involved in this path; a plain git clone provides the
+     file (25.91 MB).
+   - Storage: ships IN the deployment repository only - one copy, no
+     duplication in the Space or an HF model repo.
+
+3. Relationship checkpoint strategy
+   - Exact path: REPO_ROOT/notebook/models/best_full_fusion_30epoch.pt via
+     torch.load(..., map_location=device, weights_only=False); the key
+     "model_state_dict" is loaded STRICTLY into CachedRelationshipModel with
+     the architecture hard-coded in pipeline.py (150/51/512/64/32/256,
+     dropout 0.30). No config/YAML/JSON sidecar exists or is needed.
+   - Repo-relative and repo-tracked (.gitignore exception since Phase 1).
+   - Fresh-Linux P2 performed this load with strict load_state_dict SUCCEEDING
+     -> checkpoint architecture matches the current model code (verified
+     live, not inferred). No retraining, no checkpoint edits.
+   - Ships directly with the backend deployment repository; single copy.
+
+4. VG metadata strategy
+   - VisualGenomeLoader.__init__ unconditionally opens ALL THREE: VG-SGG.h5
+     (h5py.File), VG-SGG-dicts.json, image_data.json -> all needed at
+     STARTUP (lifespan), none read per-request. Sum = 67.61 + 0.01 + 16.80
+     = 84.42 MB - confirms the "~85 MB metadata, NOT 43.8 GB" audit figure.
+   - dicts.json is functionally essential (YOLO vocabulary + label/predicate
+     index maps); h5 and image_data.json are startup-only weight of the
+     unmodified loader (slimming = future code change, out of scope).
+   - All three are already git-tracked; a fresh clone contains them. No Git
+     LFS, no HF model storage (h5 = 67.61 MB < GitHub 100 MB soft limit).
+   - VG_100K, VG_100K_2, VG_100K.zip, VG_100K_2.zip, VG150_curated.zip and
+     any other image archive are NOT part of deployment (section 14).
+
+5. Ultralytics CLIP strategy - PATH A (YOLO-World text tower)
+   - Loader chain (verified in traceback): detector.set_classes ->
+     ultralytics nn/tasks.set_classes -> get_text_pe ->
+     build_text_model("clip:ViT-B/32") -> ultralytics/nn/text_model.CLIP ->
+     clip.load(size, download_root=str(WEIGHTS_DIR / "clip")).
+   - Exact file: ViT-B-32.pt (353,976,522 B); clip._download verifies
+     SHA-256 and only downloads from openaipublic.azureedge.net when the
+     file is missing or corrupt (NO auth, no HF, no LFS).
+   - Exact cache/path: WEIGHTS_DIR = ultralytics settings "weights_dir".
+     Windows dev: %APPDATA%\Ultralytics\settings.json -> C:\Users\psytr\
+     weights -> ...\weights\clip\ViT-B-32.pt (337.6 MB, measured).
+     Fresh Linux (no settings file): default weights_dir is the RELATIVE
+     string "weights" resolved against the process CWD -> P1 literally
+     created <cwd>/weights/clip/ (live-proven); if CWD is inside a git
+     repo, GIT.root applies instead. Settings file location: $HOME/.config/
+     Ultralytics, but when $HOME/.config does not exist ultralytics falls
+     back to /tmp/Ultralytics/settings.json (observed live) and honors
+     YOLO_CONFIG_DIR. => Deployment must PIN this (seed settings.json with
+     an absolute weights_dir) so the container is CWD-independent.
+   - Explicit local path / packaged artifact: the loader has no path
+     argument, but file placement at the resolved directory IS the
+     supported mechanism (SHA-verified, no source change).
+   - First-startup download: YES if missing (live: urllib URLError
+     Connection reset on the CDN in P1). Offline flags do NOT govern this
+     path - file presence is the only switch.
+   - Python dependency: `import clip` from git+https://github.com/
+     ultralytics/CLIP.git. If absent, ultralytics check_requirements
+     (install=True) runs a RUNTIME `python -m pip install git+...` needing
+     git + GitHub + pip (P1 live: auto-installed commit a13192f8cb767260d
+     7dfd98c843b0716593169e7 in 13.2 s, then still failed at the weights
+     download). Unacceptable for offline production -> must become an
+     explicit pinned deploy dependency (Phase 5; requirements-deploy.txt
+     deliberately untouched this phase).
+   - Duplication: PATH A and PATH B are the same OpenAI CLIP ViT-B/32
+     PRETRAINING but DIFFERENT formats/keys (JIT .pt 337.6 MB vs timm
+     safetensors 577 MB) - NOT interchangeable. Deduplicating = model code
+     change + numerical-risk -> NOT doing (pipeline locked, rule 11).
+   - After set_classes, ultralytics caches txt_feats and predict() runs
+     without CLIP -> per-request path needs no PATH A network.
+
+6. open_clip CLIP strategy - PATH B (relationship visual features)
+   - Loader: notebook/models/relationship/encoder.ImageEncoder ->
+     open_clip.create_model_and_transforms("ViT-B-32", pretrained="openai").
+     open_clip 3.3.0 resolves the known tag via pretrained.py: hf_hub =
+     "timm/vit_base_patch32_clip_224.openai" (trailing slash in cfg).
+   - Exact file: HF cache ~/.cache/huggingface/hub/models--timm--
+     vit_base_patch32_clip_224.openai/{blobs/e6d1bd...b7c31 (605,143,284 B),
+     refs/main = a6f597a30f7b82c51704746581f9a4e41421e878,
+     snapshots/<rev>/open_clip_model.safetensors (link to the blob)}.
+     Tokenizer BPE vocab ships inside the open_clip package (no artifact).
+   - Explicit local path: SUPPORTED (factory.py:418 `elif
+     os.path.isfile(pretrained)`) - but using it means editing encoder.py
+     -> deferred as unnecessary; pre-seeding the cache needs no code change.
+   - First-startup download: only when the cache is missing AND flags are
+     off. With backend HF_HUB_OFFLINE=1 (setdefault before pipeline import)
+     a missing cache = deterministic startup failure, never silent network.
+   - Offline: P2 proved full startup + /analyze with the flags ON and the
+     staged cache (log line: "Loading full pretrained weights from:
+     <staged snapshot path>").
+   - Can cache be pre-populated at build? YES - supported HF pattern:
+     download into $HF_HOME/hub during image build (hf CLI or python) or
+     COPY a pre-fetched cache; bake refs+blobs+snapshot layout intact.
+
+7. Offline flag analysis (HF_HUB_OFFLINE=1 / TRANSFORMERS_OFFLINE=1)
+   A. All required artifacts local -> YES, offline mode REMAINS ENABLED.
+      Proven by P2: pipeline built and reference analyze returned with both
+      flags active and zero network access.
+   B. If a fresh deployment must download anything, exactly:
+      - PATH B: huggingface.co, only at ImageEncoder construction, only
+        with flags OFF -> never needed if cache is baked (chosen).
+      - PATH A: openaipublic.azureedge.net at set_classes when file missing
+        (flags do not apply) -> never needed if the file is baked.
+      - clip pip package: github.com + pip at first startup if missing ->
+        move to IMAGE BUILD (pip install) -> never at runtime.
+      All three can happen at image BUILD time; nothing requires runtime
+      network once the image is built.
+   C. Supported way to pre-populate during Docker build: YES, all standard:
+      (1) pip install -r requirements-deploy.txt + pinned clip git dep;
+      (2) fetch ViT-B-32.pt into the seeded absolute weights_dir (SHA
+      self-checked later by clip.load); (3) fetch the HF snapshot into
+      $HF_HOME/hub (or hf download timm/vit_base_patch32_clip_224.openai
+      --cache-dir $HF_HOME/hub). Layers persist -> runtime fully offline.
+      Strategy only - not implemented (Phase 5/6 territory).
+
+8. Storage/deployment option comparison (practical options for THIS project)
+
+| Option | Storage | Startup | Cold start | Network | Reproducibility | Complexity | Offline flags | Git LFS | 43.8 GB excluded |
+|---|---|---|---|---|---|---|---|---|---|
+| A. Artifacts directly in the Space/repo | repo already 2.92 GiB loose objects; +915 MB CLIP would bloat clones | instant (files in tree) | fastest | none at build | high (git SHA) | low now, high later (repo weight) | stays ON | would be needed for 337.6 MB (>100 MB file) | yes |
+| B. HF model repo, fetch at build/startup | ~915 MB in an HF model repo | build fetch (or startup fetch) | fetch adds build time / startup time if not baked | build OR runtime (public, no token) | high (pinned revision) | medium (extra repo, manifest) | stays ON if baked at build | HF-side LFS (free quota) | yes |
+| C. Download public vendor artifacts during image build, bake into image | 0 stored remotely; +915 MB inside image layers | instant (baked) | fastest after first build | build-time only | high IF pinned (clip SHA-256 + HF blob SHA/rev) | low (a few Dockerfile lines) | stays ON | none | yes |
+| D. Chosen: C primary, B as mirror/fallback, A for the files already tracked | as C; optional mirror | as C | as C | build-time only | highest (pins + mirror) | low-medium | stays ON | none for CLIP | yes |
+
+   Rejected specifics: A for the two CLIP files (337.6 MB is above GitHub's
+   100 MB soft limit and would need LFS in a repo that is already 2.92 GiB;
+   the two .pt checkpoints and VG metadata are already tracked - do not add
+   CLIP); B as primary (maintaining mirror copies of two vendor-public,
+   checksummed files adds process for no reliability gain); runtime-download
+   variants of B/C at STARTUP (defeats offline flags, P1 showed the CDN can
+   reset connections).
+
+9. Chosen strategy and why
+   - Ship everything repo-resident via git as-is (both .pt + all three VG
+     metadata files; already tracked, single copies, no duplication).
+   - Bake the two CLIP artifacts into the deploy IMAGE at build time
+     (Option C): ViT-B-32.pt into a SEEDED, absolute ultralytics
+     weights_dir (settings.json written at build -> CWD-independent), and
+     the HF snapshot into $HF_HOME/hub.
+   - Add the pinned clip git dependency to the deploy install at BUILD
+     (decision recorded; file change deferred to Phase 5 + re-verify).
+   - Keep HF_HUB_OFFLINE=1 / TRANSFORMERS_OFFLINE=1 untouched and effective.
+   - Option B mirror retained only as contingency if the OpenAI CDN proves
+     unreliable during real image builds.
+   Why: 0 bytes of new remote storage, deterministic (SHA-pinned), fastest
+   cold start, zero startup network, honors every "do not modify the model"
+   rule, and matches the pre-existing audit recommendation (bake with
+   offline flags intact).
+
+10. Exact minimum deployment payload
+   MUST SHIP (inference-required):
+   - all repository code + tracked runtime files: yolov8s-world.pt (25.91),
+     best_full_fusion_30epoch.pt (2.36), VG-SGG.h5 (67.61),
+     VG-SGG-dicts.json (~0.01), image_data.json (16.80)  => 112.69 MB
+     (already inside git; nothing new to move/copy)
+   - PATH A ViT-B-32.pt                                        => 337.6 MB (into image)
+   - PATH B open_clip_model.safetensors                          => 577.1 MB (into image)
+   - Python deps per requirements-deploy.txt + pinned clip git package (~1.4 GB installed)
+   MUST NOT SHIP:
+   - VG_100K/ + VG_100K_2/ extracted images, VG_100K.zip
+     (9,283.69 MB), VG_100K_2.zip (5,219.90 MB)  => the 43.8 GB dataset
+   - notebook/models/preprocessed_cache/ (1,708 MB, training)
+   - .venv, node_modules, pip/HF/clip caches outside the two baked locations
+   - any training/Jupyter outputs
+   BUILD-TIME ONLY (may exist transiently during image build):
+   - both CLIP artifact fetches, clip git wheel build, pip wheel cache,
+     ultralytics settings.json seeding, matplotlib/font caches
+   OPTIONAL (droppable only with a future code change - NOT done now):
+   - VG-SGG.h5 + image_data.json (84.42 MB startup-only; loader opens them
+     unconditionally today)
+   - rides-along-but-unused tracked files: VG150_curated.zip (22.47),
+     zeroshot_triplet.pytorch (0.07), notebooks - kept untouched per the
+     git-history constraint; simply irrelevant to inference
+
+11. Approximate payload size
+   Runtime artifacts (repo files + both CLIP files):
+   112.69 + 337.6 + 577.1 = 1,027.4 MB  (~1.03 GB)
+   plus ~1.4 GB installed site-packages from requirements-deploy.txt.
+   Nothing is copied or moved in the repository this phase.
+
+12. Fresh-environment findings (WSL2 Ubuntu-24.04 / Python 3.12, fresh venv,
+    empty HOME, no HF/Ultralytics/torch caches, repo-only, offline flags as
+    shipped by backend setdefault)
+    Setup quirk: this WSL image actively cleans /tmp mid-session (a venv
+    built there vanished between boots; markers proved /tmp/m4 deleted while
+    /var/tmp/m4 survived) -> all simulation state was kept under /var/tmp.
+    STAGE P1 (repo-only, first failure classification), exit 1:
+      - IMPORT_OK 11.2s: production imports need NO cache/model.
+      - Startup then hit, IN ORDER:
+        A (missing Python dep `clip`) -> ultralytics auto-ran
+          `pip install git+https://github.com/ultralytics/CLIP.git`
+          (needs git+GitHub+pip at STARTUP; resolved commit a13192f8...);
+        B/E (missing PATH A artifact surfacing as a network attempt) ->
+          clip.load tried openaipublic.azureedge.net ->
+          URLError [Errno 104] Connection reset -> PIPELINE_FAIL.
+      - Traceback pinpoints: backend.get_pipeline -> pipeline.py:208
+        YoloWorldDetector -> set_classes -> get_text_pe ->
+        build_text_model -> text_model.CLIP -> clip.load -> _download.
+      - Ultralytics config fallback observed: $HOME/.config missing ->
+        settings created at /tmp/Ultralytics/settings.json; default
+        weights_dir is cwd-relative "weights"; P1 created
+        <cwd>/weights/clip/ (empty dir after the failed download).
+    STAGE P2 (fresh HOME + ONLY the two artifacts staged at the exact
+    resolved locations), exit 0:
+      - STAGED_PATH_A /var/tmp/sg4/cwd/weights/clip/ViT-B-32.pt (337.6 MB)
+      - STAGED_PATH_B HF cache blob+refs+snapshot constructed
+        (605,143,284 B); open_clip log confirmed loading FROM the staged
+        snapshot under HF_HUB_OFFLINE=1.
+      - IMPORT_OK 30.9s; PIPELINE_OK 118.2s (YOLO .pt + CLIP A + CLIP B +
+        strict checkpoint load, zero downloads); ANALYZE_OK objs=9
+        rels=16 secs=21.9 on the reference VG image - EXACTLY the
+        documented Windows baseline (9 objects / 16 relationships).
+    Classification summary:
+      A dependency: `clip` missing from deploy requirements (P1) - the only
+        true dependency gap; everything else installed from
+        requirements-deploy.txt with zero source builds.
+      B model artifact: PATH A ViT-B-32.pt missing on fresh machine (P1);
+        PATH B would be next (blocked offline). Repo .pt files NEVER
+        missing (git-tracked).
+      C VG metadata: never missing - a git clone provides all three files;
+        the loader opened them successfully in P1/P2 on Linux (h5py fine).
+      D cache-path: PATH B layout = standard HF cache (constructible);
+        PATH A = settings/cwd-dependent (must be seeded to be
+        container-robust); ultralytics settings dir falls back to /tmp
+        when ~/.config is absent.
+      E network/offline: two startup network paths found (clip git install;
+        PATH A CDN). Offline flags correctly suppress PATH B network;
+        neither stage ever reached huggingface.co.
+      F Windows-specific: none - all production paths derive from
+        REPO_ROOT; the pipeline runs Linux-clean end to end.
+      G other: active /tmp cleaner in this WSL image (worked around via
+        /var/tmp); ultralytics first-run settings/telemetry attempts are
+        non-fatal; CWD sensitivity of the default weights_dir must be
+        neutralized by seeding settings.json in the image.
+    No failures were patched; staging used only byte-for-byte copies of
+    existing local artifacts.
+
+13. Unresolved issues (deliberately NOT fixed in this phase)
+    1. clip git dependency not yet added to requirements-deploy.txt;
+       Phase 5 must add it PINNED (candidate: clip @
+       git+https://github.com/ultralytics/CLIP.git@a13192f8cb767260d7dfd
+       98c843b0716593169e7), ensure `git` exists in the build image, and
+       re-run pip check + import verification.
+    2. Ultralytics settings seeding (absolute weights_dir, optional
+       YOLO_CONFIG_DIR) to be encoded in the future Dockerfile so startup
+       is CWD- and HOME-independent.
+    3. OpenAI CDN reliability (P1 saw a connection reset) - decide at
+       build time whether the Option B mirror is needed.
+    4. Docker not installed; no Dockerfile; no HF Space; no Vercel -
+       untouched by design (Phase 5/6 items).
+    5. Loader startup weight (h5 + image_data.json = 84.42 MB opened but
+       unused per-request) - candidate optimization requiring a loader
+       change, explicitly deferred.
+    6. Ultralytics first-run telemetry (settings sync) attempts network -
+       non-fatal; may be disabled via settings in the image later.
+    7. WSL /tmp cleaner instability in this dev environment - remember
+       when re-running simulations (use /var/tmp).
+
+14. 43.8 GB image dataset exclusion
+    CONFIRMED EXCLUDED: VG_100K/, VG_100K_2/, VG_100K.zip (9,283.69 MB),
+    VG_100K_2.zip (5,219.90 MB) and all other training image archives were
+    never staged, copied, committed, or listed in any deployment payload;
+    Phase 1 .gitignore rules remain intact; NO history rewrite, NO
+    filter-repo, NO force-push; historical tracked files
+    (VG150_curated.zip etc.) untouched; `git status` shows ONLY this
+    diary file modified.
+
+15. Files changed (Phase 4)
+    - EDIT post_training_full_stack.md (this Entry 15) - the ONLY change.
+    - requirements-deploy.txt UNCHANGED; requirements.txt UNCHANGED;
+      backend/, scene_graph/, notebook/, datasets/, frontend/ UNCHANGED;
+      no code change was necessary (both CLIP paths work with pure
+      file-placement / cache pre-seeding, as proven by P2).
+    - Tests: none required for a markdown-only change; git diff confirms
+      no code touched. Last full code regression remains Phase 3's passing
+      set (test_api_local ALL PASSED, test_pipeline_local 9 objs / 16
+      rels, npm run build exit 0). Fresh-Linux P2 additionally acts as an
+      end-to-end pipeline regression and matched the baseline exactly.
+    - Temp helpers (Windows %TEMP%\sg4_*.{sh,py,log}; WSL /var/tmp/sg4
+      and markers) deleted after recording these numbers.
+    - Cleared for ONE commit -> origin main; STOP after Phase 4.
+
+================================================================================
+END OF ENTRY 15 - PHASE 4 (MODEL / DATA ARTIFACT DEPLOYMENT STRATEGY)
+================================================================================
