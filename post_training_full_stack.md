@@ -3163,3 +3163,199 @@ or deployment work in this phase.
 ================================================================================
 END OF ENTRY 13 - PHASE 2 (ENVIRONMENT CONFIGURATION)
 ================================================================================
+## Entry 14 - PHASE 3: RUNTIME DEPENDENCY PREPARATION (LINUX CPU)
+
+Scope: inspect + classify production runtime dependencies, choose a
+requirements strategy, prove it in a clean WSL2 Ubuntu-24.04 env.
+No Docker, no Dockerfile, no deployments, no ML/frontend changes.
+
+1. Runtime dependency classification (traced from actual imports)
+
+   Production import chain (every module read, no guessing):
+
+     backend/main.py
+       -> fastapi (+ python-multipart enforced at route registration)
+       -> PIL (lazy, inside _decode_upload)
+       -> scene_graph.pipeline
+            -> torch, PIL
+            -> datasets.visual_genome (__init__)
+                 -> loader -> h5py, PIL
+                 -> visualisations -> matplotlib.pyplot  (!! both are
+                    import-time deps of the production path)
+            -> notebook.models.relationship.encoder -> open_clip
+            -> notebook.models.relationship.model -> torch
+            -> scene_graph.detector -> ultralytics (YOLOWorld)
+            -> scene_graph.features / mapping / postprocessing /
+               predictor -> torch, PIL, notebook.geometry
+       -> uvicorn (via __main__ / production run command)
+
+   A. REQUIRED FOR PRODUCTION INFERENCE (pinned in deploy file):
+      fastapi, uvicorn, python-multipart, torch, torchvision,
+      ultralytics, open_clip_torch, pillow, numpy, h5py, matplotlib.
+   B. REQUIRED ONLY FOR TRAINING / NOTEBOOKS (stay only in
+      requirements.txt): pandas, scipy, supervision, torchaudio,
+      the Jupyter/IPython stack (ipykernel, ipython,
+      ipython_pygments_lexers, jedi, parso, comm, debugpy, executing,
+      asttokens, pure_eval, stack-data, prompt_toolkit,
+      nest-asyncio2, pyDeprecate, matplotlib-inline, jupyter_client,
+      jupyter_core, pyzmq, tornado, traitlets, wcwidth), colorama
+      (Windows console only).
+   C. TRANSITIVE / RESOLVED BY PIP (not pinned directly):
+      opencv-python (hard dep of ultralytics), pyyaml, requests,
+      psutil, polars + polars-runtime-32, ultralytics-thop,
+      nvidia-ml-py (telemetry-only hard dep of ultralytics; contains
+      NO CUDA libraries), filelock, fsspec, jinja2, networkx, sympy,
+      huggingface-hub, hf-xet, safetensors, ftfy, regex, timm
+      (pulled by open_clip_torch - confirmed by clean install),
+      matplotlib's deps (contourpy, cycler, fonttools, kiwisolver,
+      pyparsing, python-dateutil, six, packaging).
+
+   Evidence-based exclusions:
+   - clip @ git+https://github.com/ultralytics/CLIP.git@...:
+     repo-wide grep = 0 imports; full recursive grep of installed
+     ultralytics 8.4.115 = 0 imports (only a docstring example
+     `model = "clip:ViT-B/32"` in a YOLO-World training script).
+     UNUSED by production -> excluded (removes git + GitHub
+     fragility from the deploy path).
+   - No production module imports numpy/pandas/cv2/supervision/timm
+     directly; numpy IS pinned because torch/ultralytics/matplotlib
+     hard-require it at runtime.
+
+2. Production dependency list (requirements-deploy.txt, 12 pins)
+
+   --extra-index-url https://download.pytorch.org/whl/cpu
+   fastapi==0.141.1
+   uvicorn==0.52.4
+   python-multipart==0.0.20
+   torch==2.13.0+cpu
+   torchvision==0.28.0+cpu
+   ultralytics==8.4.115
+   open_clip_torch==3.3.0
+   pillow==12.3.0
+   numpy==2.4.6
+   h5py==3.16.0
+   matplotlib==3.11.1
+
+3. Training-only dependencies identified
+   See 1.B: ~30 Jupyter/IPython pins + pandas, scipy, supervision,
+   torchaudio, colorama.  None are imported by backend/,
+   scene_graph/, datasets/visual_genome/ or
+   notebook/models/relationship/ code.  matplotlib and h5py LOOK
+   training-ish but are import-time production deps - kept.
+
+4. requirements.txt strategy: RETAINED + NEW requirements-deploy.txt
+   - requirements.txt untouched (still the UTF-16LE 82-pin
+     dev/training freeze; git status shows no modification).  NOT
+     usable directly for Linux CPU deployment because:
+       * torch==2.13.0 / torchvision==0.28.0 without the +cpu local
+         label resolve to the PyPI CUDA builds on Linux (nvidia-*
+         CUDA wheels); locally the +cpu wheels satisfied the == pins
+         silently.
+       * ~30 Jupyter/training-only packages bloat the image.
+       * clip @ git+... would require git + GitHub at build time
+         for zero benefit (unused package).
+       * colorama is Windows-only; nvidia-ml-py implies GPU tooling.
+   - requirements-deploy.txt is UTF-8 / LF, direct-deps-only, no git
+     dependencies; transitive closure left to pip (validated below).
+
+5. PyTorch CPU strategy
+   - Pins use the PEP 440 local label: torch==2.13.0+cpu and
+     torchvision==0.28.0+cpu.  Those builds exist ONLY on
+     https://download.pytorch.org/whl/cpu (declared via
+     --extra-index-url inside the file), so pip CANNOT resolve CUDA
+     wheels; no CUDA packages are introduced.
+   - torch==2.13.0+cpu satisfies ultralytics'/torchvision's
+     `torch (==2.13.0)` requirement (PEP 440 ignores the local label
+     when the specifier has none) - proven by local `pip check`
+     (clean) and by the clean-Linux `pip check` below.
+   - No upgrade: identical torch/torchvision versions to the
+     verified local env (reproducibility, not modernization).
+     torchaudio excluded (never imported anywhere in the runtime).
+   - Only direct deps are pinned; unpinned transitives drift to
+     newer minors on a fresh resolve (observed: polars 1.44.2 vs
+     1.43.2 frozen, networkx 3.7 vs 3.6.1, timm 1.0.30 vs 1.0.28).
+     Acceptable; a full lock file can be generated later if wanted.
+
+6. Linux/WSL installation result: SUCCESS
+   - Temp venv: Ubuntu-24.04 / Python 3.12.3, /tmp/sg-deploy-venv
+     (system WSL untouched; pip cache in /tmp/sg-pip-cache).
+   - `pip install -r requirements-deploy.txt` -> Successfully
+     installed incl. torch-2.13.0+cpu torchvision-0.28.0+cpu
+     fastapi-0.141.1 uvicorn-0.52.4 python-multipart-0.0.20
+     ultralytics-8.4.115 open_clip_torch-3.3.0 h5py-3.16.0
+     matplotlib-3.11.1 numpy-2.4.6 pillow-12.3.0 (+ transitives).
+   - All wheels for cp312/manylinux - zero source builds, no
+     compilers or system libraries needed.  One transient connection
+     reset on the pytorch index was retried automatically by pip.
+   - `pip check` -> "No broken requirements found."
+   - CUDA audit: pip list shows NO cuda/triton packages; only
+     nvidia-ml-py (telemetry, ultralytics hard dep, no CUDA libs).
+
+7. Import test result: 9/9 PASS (clean env, empty HOME)
+   Run with HOME=/tmp/sg-empty-home, PYTHONDONTWRITEBYTECODE=1,
+   PYTHONPATH=repo, HF_HOME/TORCH_HOME/XDG_CACHE_HOME unset:
+     [PASS] fastapi 0.141.1
+     [PASS] python-multipart 0.0.20 (module multipart)
+     [PASS] uvicorn 0.52.4
+     [PASS] torch 2.13.0+cpu cuda_built=None cuda_available=False
+            threads=8  (CUDA NOT required; CPU wheel confirmed)
+     [PASS] ultralytics 8.4.115
+     [PASS] open_clip
+     [PASS] scene_graph production package
+     [PASS] from backend.main import app
+            title='Scene Graph Explorer API'; HOST/PORT/CORS defaults
+            routes=['/analyze','/docs','/docs/oauth2-redirect',
+                    '/health','/openapi.json','/redoc']
+     [PASS] HF offline flags set by backend import ('1','1')
+   - sys.path contained only: checks-script dir, repo root, stdlib,
+     venv site-packages - no developer-specific dirs, no local
+     packages outside the repo.
+   - git grep: the only Windows strings in production modules are
+     `.venv\Scripts\...` docstring run-instructions in
+     backend/main.py (not executed) and notebook cells (not
+     imported by the backend).
+   - Empty-HOME import proves the import path needs NO model
+     caches: the pipeline is constructed lazily at lifespan only.
+
+8. Deferred to Phase 4 (explicitly NOT solved now)
+   - MODEL ARTIFACT / CACHE TRANSPORT: importing the backend does
+     not load weights, but STARTING it (lifespan -> get_pipeline())
+     needs notebook/models/*.pt (yolov8s-world.pt,
+     best_full_fusion_30epoch.pt), the Visual Genome metadata +
+     VG-SGG.h5, and the CLIP ViT-B-32 openai cache currently in the
+     Windows user profile (~/.cache/huggingface/hub; ~577 MB +
+     337.6 MB caches live OUTSIDE the repo).  On a fresh Linux box
+     these are absent -> runtime failure at pipeline construction,
+     which is a MODEL ARTIFACT problem, NOT a dependency problem.
+     Nothing bundled into the repo; offline flags
+     (HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE) untouched.
+   - Dockerfile / Docker image: Phase 6 (Docker not installed).
+
+9. Tests and results (local Windows env, requirements.txt unchanged)
+   - tests/test_pipeline_local.py -> PASS: 9 objects / 16
+     relationships, confidences unchanged (e.g.
+     tree->no relationship->shoe 97.30%)
+   - tests/test_api_local.py -> RESULT: ALL PASSED (analyze success,
+     missing file, invalid image, unsupported type)
+   - npm run build (frontend untouched; run as cheap insurance with
+     the ComSpec workaround) -> built in 9.57s, exit 0, empty stderr
+   - Local `pip check` -> clean (the +cpu pins satisfy
+     ultralytics' torch (==2.13.0))
+   - test_api_manual / test_batching / test_postprocessing NOT
+     rerun: git diff -- scene_graph notebook is EMPTY, so those
+     code paths did not change.
+
+10. Files changed (Phase 3)
+    - NEW  requirements-deploy.txt        (12 pins + CPU index line)
+    - EDIT post_training_full_stack.md    (this Entry 14)
+    - requirements.txt UNCHANGED; ML code UNCHANGED
+    - WSL temp artifacts created then DELETED: /tmp/sg-deploy-venv,
+      /tmp/sg-pip-cache, /tmp/sg-empty-home, /tmp/Ultralytics;
+      Windows temp helpers: sg3_test.sh, sg3_checks.py.
+    - Cleared for ONE commit "Deployment preparation: runtime
+      dependencies" -> origin main (step 3J); hash reported in the
+      final Phase 3 report.
+
+================================================================================
+END OF ENTRY 14 - PHASE 3 (RUNTIME DEPENDENCIES)
+================================================================================

@@ -1,0 +1,46 @@
+# Scene Graph Explorer - deployment runtime dependencies (Linux, CPU-only)
+#
+# Strategy (Deployment Phase 3):
+#   - requirements.txt stays the full dev/training environment freeze
+#     (UTF-16LE, 82 pins, includes Jupyter/training-only packages and a
+#     git dependency). It is kept UNCHANGED for development.
+#   - THIS file lists only the packages the production inference path
+#     actually imports (traced from backend/main.py through scene_graph/
+#     + notebook/models/relationship/ + datasets/visual_genome/), pinned
+#     to the versions verified working locally.
+#   - PyTorch CPU: torch/torchvision use the "+cpu" local-version pins,
+#     which only exist on the PyTorch CPU wheel index below - so pip can
+#     NEVER resolve CUDA wheels. No nvidia-* CUDA packages are introduced.
+#     (ultralytics also declares nvidia-ml-py as a hard dependency; it is
+#     a telemetry binding with no CUDA libraries and installs regardless.)
+#   - Transitive deps (opencv-python via ultralytics, pyyaml, requests,
+#     ftfy/regex/huggingface-hub via open_clip, contourpy/etc. via
+#     matplotlib, ...) are resolved by pip automatically; only direct
+#     runtime dependencies are pinned here.
+#
+# Install (fresh Linux CPU environment):
+#   pip install -r requirements-deploy.txt
+#
+# Excluded on purpose (evidence-based, see Diary Entry 14):
+#   - clip @ git+... : no `import clip` anywhere in repo or ultralytics
+#   - torchaudio, pandas, scipy, supervision, Jupyter/IPython stack,
+#     colorama : not imported by the production path
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- web layer (backend/main.py) ---
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.20
+
+# --- ML runtime (scene_graph/, notebook/models/relationship/) ---
+torch==2.13.0+cpu
+torchvision==0.28.0+cpu
+ultralytics==8.4.115
+open_clip_torch==3.3.0
+
+# --- image / data / numerics (imported at package import time) ---
+pillow==12.3.0
+numpy==2.4.6
+h5py==3.16.0
+matplotlib==3.11.1
