@@ -1,0 +1,1008 @@
+/* Scene Graph Explorer - dark theme.
+   Rewritten in the frontend-polish phase; the previous version had been left
+   with unbalanced braces by an interrupted edit. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #0b0f17;
+  color: #c9d4e0;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 20px 32px 64px;
+}
+
+/* While the explorer is on screen the page is capped to roughly one viewport,
+   so the image panel and the graph panel get the same height.  The stacked
+   (narrow screen) layout keeps normal document flow. */
+.app.is-explorer {
+  padding-bottom: 32px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 6px 0 18px;
+  border-bottom: 1px solid #1c2533;
+  margin-bottom: 22px;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  background: linear-gradient(150deg, #17253c, #0e1726);
+  border: 1px solid #24374f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5b9bf3;
+}
+
+.brand-mark svg {
+  width: 21px;
+  height: 21px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.brand-text h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: #eef4fb;
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: #66788f;
+  letter-spacing: 0.2px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------------- buttons ---------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 550;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.btn:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.btn-lg {
+  padding: 11px 26px;
+  font-size: 14.5px;
+}
+
+.btn-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.btn-primary:disabled {
+  background-color: #1e3a5f;
+  color: #5a7089;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: #1e293b;
+  color: #cbd5e1;
+  border-color: #2d3b4e;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #273549;
+  border-color: #3d4f66;
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: #8899aa;
+  border: 1px solid transparent;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: #cbd5e1;
+  background-color: #131a24;
+}
+
+.btn-ghost:disabled {
+  color: #47566b;
+  cursor: not-allowed;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ---------------- messages / states ---------------- */
+
+.error-box {
+  background-color: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  border-left: 4px solid #ef4444;
+}
+
+.empty-state,
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 56vh;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.hero-icon {
+  color: #3f5f8a;
+  margin-bottom: 22px;
+}
+
+.hero-icon svg {
+  width: 132px;
+  height: 94px;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  fill: none;
+  opacity: 0.9;
+}
+
+.empty-state h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 620;
+  letter-spacing: 0.2px;
+  color: #eef4fb;
+}
+
+.hero-text {
+  max-width: 520px;
+  margin: 12px 0 26px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #7d8ea6;
+}
+
+.hero-hint {
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #55677e;
+}
+
+/* Loading is an intentional content region: a centred card that keeps the
+   panel footprint of the other states, so nothing jumps when analysis ends.
+   Deliberately says nothing about the implementation or how long it takes. */
+.loading-state {
+  min-height: 470px;
+}
+
+.loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 44px 52px;
+  border: 1px solid #1c2533;
+  border-radius: 12px;
+  background-color: #0f1620;
+}
+
+.loading-text {
+  margin: 18px 0 0;
+  font-size: 14.5px;
+  color: #cbd5e1;
+}
+
+.loading-file {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #55677e;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid #1b2634;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------- preview + summary ---------------- */
+
+.preview-section {
+  margin-bottom: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.preview-section .btn {
+  margin-top: 16px;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 8px;
+  border: 1px solid #1c2533;
+}
+
+.file-name {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #6b7c93;
+}
+
+.results-section {
+  margin-bottom: 20px;
+}
+
+.results-grid {
+  display: flex;
+  gap: 0;
+  border: 1px solid #1c2533;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: #111827;
+  width: fit-content;
+}
+
+.result-stat {
+  border: none;
+  border-right: 1px solid #1c2533;
+  border-radius: 0;
+  padding: 12px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 128px;
+}
+
+.result-stat:last-child {
+  border-right: none;
+}
+
+.stat-num {
+  font-size: 24px;
+  font-weight: 650;
+  color: #eef4fb;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+  font-size: 10.5px;
+  letter-spacing: 1.1px;
+  color: #66788f;
+  margin-top: 6px;
+}
+
+/* ---------------- explorer: image | graph ---------------- */
+
+.explorer {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr; /* ~45% image / 55% graph */
+  gap: 24px;
+  /* matched panel heights: see .app.is-explorer -> .explorer-panel height */
+  align-items: stretch;
+}
+
+.explorer-panel {
+  background-color: #111827;
+  border: 1px solid #1c2533;
+  border-radius: 10px;
+  padding: 18px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Both panels share one row height, so the image panel's content column and
+   the graph viewport both fill it.  The children below are given explicit
+   min-height:0 so a flex child can actually shrink instead of overflowing. */
+.app.is-explorer .explorer-panel {
+  height: 564px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: none;
+}
+
+.explorer-panel h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: #8ea1ba;
+}
+
+/* ---------------- detection toggle ---------------- */
+
+.toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: #93a4ba;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The real checkbox stays the click target (and stays accessible); it is
+   simply painted as a switch track. */
+.toggle-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  /* Painted AFTER .toggle-track so hit-testing reaches the real input first;
+     otherwise the track intercepts Playwright/real clicks (aria-hidden). */
+  z-index: 1;
+}
+
+/* The toggle mark is presentation-only (accessible via the real input), so
+   hit-testing clicks through to the label/input below. */
+.toggle-track {
+  width: 36px;
+  height: 20px;
+  flex: none;
+  border-radius: 10px;
+  background-color: #26323f;
+  border: 1px solid #35475e;
+  position: relative;
+  transition: background-color 0.15s, border-color 0.15s;
+  pointer-events: none;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #7d8ea6;
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.toggle-input:checked + .toggle-track {
+  background-color: #2f68c4;
+  border-color: #3b82f6;
+}
+
+.toggle-input:checked + .toggle-track::after {
+  transform: translateX(16px);
+  background-color: #fff;
+}
+
+.toggle-input:focus-visible + .toggle-track {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.toggle:hover .toggle-track {
+  border-color: #46617f;
+}
+
+.toggle-text {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------- image viewer + bounding boxes ---------------- */
+
+.scene-image {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Centre the shrink-wrapped image inside the (possibly taller) panel body.
+   The wrapper still shrink-wraps the <img>, which is what keeps the
+   percentage-based bounding boxes aligned. */
+.scene-image-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.scene-image-wrap {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #1c2533;
+}
+
+.scene-image-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bbox-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bbox {
+  position: absolute;
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  pointer-events: all;
+}
+
+.bbox:hover {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.bbox-label {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.bbox-selected {
+  border: 3px solid #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+}
+
+.bbox-selected .bbox-label {
+  background: #ef4444;
+}
+
+.bbox-highlighted {
+  border: 2.5px solid #f0932c;
+  background: rgba(240, 147, 44, 0.12);
+}
+
+.bbox-highlighted .bbox-label {
+  background: #f0932c;
+}
+
+.bbox-searched {
+  border: 2.5px solid #00897b;
+  background: rgba(0, 137, 123, 0.12);
+}
+
+.bbox-searched .bbox-label {
+  background: #00897b;
+}
+
+.scene-image-meta {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #66788f;
+  flex: none;
+}
+
+/* ---------------- graph ---------------- */
+
+.graph-wrapper {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  min-height: 32px;
+  flex: none;
+}
+
+.graph-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.graph-note {
+  font-size: 12px;
+  color: #66788f;
+}
+
+.graph-note-hidden {
+  color: #f5c76b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.show-all-visibility {
+  flex: none;
+}
+
+.lock-toggle.is-locked {
+  color: #f5c76b;
+  border-color: #5a4a25;
+  background-color: #241f14;
+}
+
+.lock-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.graph-container {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  border: 1px solid #1c2533;
+  border-radius: 8px;
+  background-color: #0f1620;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ---------------- React Flow chrome (dark, readable) ---------------- */
+
+.graph-container .react-flow__controls {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  border: 1px solid #2a3a4d;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.graph-container .react-flow__controls-button {
+  background-color: #18222f;
+  border: none;
+  border-bottom: 1px solid #2a3a4d;
+  width: 28px;
+  height: 28px;
+  color: #cbd5e1;
+}
+
+.graph-container .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.graph-container .react-flow__controls-button:hover {
+  background-color: #24313f;
+}
+
+.graph-container .react-flow__controls-button svg {
+  fill: #cbd5e1;
+  max-width: 14px;
+  max-height: 14px;
+}
+
+.graph-container .react-flow__minimap {
+  border: 1px solid #2a3a4d;
+  border-radius: 7px;
+  overflow: hidden;
+  background-color: #101826;
+}
+
+.graph-container .react-flow__edge-path {
+  stroke-linecap: round;
+}
+
+.graph-container .react-flow__edge-textbg {
+  fill: #131c28;
+}
+
+/* ---------------- Relationship labels (custom lane edge) ----------------
+   Rendered through React Flow's EdgeLabelRenderer, so they need their own
+   background/border: a label never blends into the graph backdrop, and an
+   opaque plate keeps it readable even where lanes run close together. */
+.graph-container .edge-label {
+  position: absolute;
+  z-index: 3;
+  max-width: 190px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid #2e3d50;
+  background-color: #131c28;
+  color: #cbd5e1;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background-color 0.12s;
+}
+
+.graph-container .edge-label:hover {
+  color: #e8eef5;
+  border-color: #46617f;
+  background-color: #17222f;
+}
+
+.graph-container .edge-label.is-selected {
+  color: #fecaca;
+  border-color: #ef4444;
+  background-color: #3a1517;
+}
+
+.graph-container .react-flow__node {
+  font-family: inherit;
+}
+
+.graph-container .react-flow__node.selected {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+}
+
+/* Dragging affordance: only meaningful while the graph is unlocked. */
+.graph-container .react-flow__node.draggable {
+  cursor: grab;
+}
+
+.graph-container .react-flow__node.dragging {
+  cursor: grabbing;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+.react-flow__node:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.graph-empty {
+  padding: 40px;
+  text-align: center;
+  color: #66788f;
+  background-color: #0f1620;
+  border: 1px dashed #26323f;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+/* ---------------- search ---------------- */
+
+.search-section {
+  background-color: #111827;
+  border: 1px solid #1c2533;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-field {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  background-color: #0b0f17;
+  border: 1px solid #2d3b4e;
+  border-radius: 7px;
+  transition: border-color 0.15s;
+}
+
+.search-field:focus-within {
+  border-color: #3b82f6;
+}
+
+.search-icon {
+  color: #55677e;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 0;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 13.5px;
+  font-family: inherit;
+}
+
+.search-field input:focus {
+  outline: none;
+}
+
+.search-count {
+  font-size: 12px;
+  color: #66788f;
+  white-space: nowrap;
+}
+
+.hint-line {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: #66788f;
+}
+
+/* ---------------- inspector ---------------- */
+
+.inspector-section {
+  margin-top: 20px;
+}
+
+.inspector {
+  background-color: #111827;
+  border: 1px solid #1c2533;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.inspector h2 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: #8ea1ba;
+}
+
+.inspector h3 {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #6b7c93;
+}
+
+.inspector h4 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  color: #8899aa;
+}
+
+.inspector-empty {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7c93;
+}
+
+.inspector-list {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.inspector-list dt {
+  font-size: 13px;
+  color: #6b7c93;
+}
+
+.inspector-list dd {
+  margin: 0;
+  font-size: 14px;
+  color: #e2e8f0;
+}
+
+.bbox-values {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: #a9bacd;
+}
+
+.inspector-relationships ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.inspector-relationships li {
+  font-size: 14px;
+  color: #cbd5e1;
+  margin-bottom: 4px;
+}
+
+.rel-conf {
+  font-size: 12px;
+  color: #6b7c93;
+}
+
+/* ---------------- "Show in graph" (inspector visibility control) ---------------- */
+
+.visibility-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 16px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid #26313f;
+  border-radius: 8px;
+  background-color: #0e1520;
+}
+
+/* Hidden elements keep a quiet amber edge so the state is unmistakable. */
+.visibility-row.is-hidden-element {
+  border-color: #5a4a25;
+  background-color: #16130c;
+}
+
+.visibility-row.is-hidden-element .visibility-label {
+  color: #f5c76b;
+}
+
+.visibility-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.visibility-eye {
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.visibility-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6b7c93;
+}
+
+/* Track-only variant of the shared toggle (no text label next to it). */
+.toggle-compact {
+  gap: 0;
+}
+
+/* ---------------- responsive ---------------- */
+
+@media (max-width: 900px) {
+  .app {
+    padding: 16px 16px 48px;
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  /* Stacked layout: no matched heights, each panel gets a sensible fixed size. */
+  .app.is-explorer .explorer-panel-image {
+    height: auto;
+  }
+
+  .app.is-explorer .explorer-panel-graph {
+    height: 520px;
+  }
+
+  .explorer {
+    grid-template-columns: 1fr;
+  }
+
+  .inspector-list {
+    grid-template-columns: 1fr;
+  }
+}

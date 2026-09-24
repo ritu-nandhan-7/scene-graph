@@ -23,6 +23,27 @@ env/
 *.ckpt
 *.zip
 
+# Deployment Phase 1: the two checkpoints required for inference are
+# intentionally tracked (small: 25.91 MB + 2.36 MB).  All other *.pt files
+# remain ignored by the general rule above.
+!notebook/models/yolov8s-world.pt
+!notebook/models/best_full_fusion_30epoch.pt
+
+# Local environment / secrets (Deployment Phase 1)
+.env
+.env.*
+!.env.example
+
+# Test caches (Deployment Phase 1)
+.pytest_cache/
+
+# Generated scratch / profiling outputs (Deployment Phase 1)
+tests/_*.txt
+tests/_scene.json
+tests/_fetch_scene.py
+tests/_profile_pipeline.py
+tests/_sweep2.txt
+
 # Logs
 *.log
 

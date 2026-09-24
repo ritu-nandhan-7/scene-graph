@@ -1,0 +1,1 @@
+"""Models package (implementation modules live under ``notebook/models/``)."""
