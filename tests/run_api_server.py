@@ -4,11 +4,16 @@ Usage:
 
     .venv\Scripts\python.exe tests\run_api_server.py
 
-Then open http://127.0..1:8000/docs in the browser to try the endpoints.
+Then open http://127.0.0.1:8000/docs in the browser to try the endpoints.
+
+HOST / PORT environment variables override the defaults (Deployment Phase 2):
+
+    HOST=0.0.0.0 PORT=7860 .venv\\Scripts\\python.exe tests\\run_api_server.py
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -22,8 +27,8 @@ import uvicorn  # noqa: E402
 if __name__ == "__main__":
     uvicorn.run(
         "backend.main:app",
-        host="127.0.0.1",
-        port=8000,
+        host=os.environ.get("HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "8000")),
         reload=False,
         log_level="info",
     )

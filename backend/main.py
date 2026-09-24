@@ -16,7 +16,18 @@ Run from the repository root:
 
     .venv\\Scripts\\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
+or equivalently (honours the HOST / PORT environment variables below):
+
+    .venv\\Scripts\\python.exe -m backend.main
+
 Swagger UI: http://127.0.0.1:8000/docs
+
+Environment variables (all optional; defaults = historical local values):
+
+    HOST          bind address              default 127.0.0.1  (production: 0.0.0.0)
+    PORT          bind port                 default 8000       (production: platform port)
+    CORS_ORIGINS  comma-separated origins   default http://localhost:5173,http://127.0.0.1:5173
+    HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE   default "1" via setdefault() below
 """
 
 from __future__ import annotations
@@ -56,11 +67,21 @@ MODEL_DIR = REPO_ROOT / "notebook" / "models"
 CHECKPOINT_PATH = MODEL_DIR / "best_full_fusion_30epoch.pt"
 YOLO_MODEL_PATH = MODEL_DIR / "yolov8s-world.pt"
 
-# Development CORS: the React dev server origin.  Extend this list later
-# when the frontend is deployed; nothing else about CORS is hardened yet.
+# Server binding + CORS are environment-driven (Deployment Phase 2).
+# The defaults below are EXACTLY the previous hardcoded local values, so
+# running without any environment variables behaves identically to before.
+# Production supplies (values NOT hardcoded here):
+#     HOST=0.0.0.0  PORT=<platform port>  CORS_ORIGINS=https://<frontend-origin>
+HOST = os.environ.get("HOST", "127.0.0.1")
+PORT = int(os.environ.get("PORT", "8000"))
+
+# Allowed browser origins: comma-separated CORS_ORIGINS, defaulting to the
+# two Vite dev-server origins (unchanged local development behavior).
+DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 CORS_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",")
+    if origin.strip()
 ]
 
 # Upload validation (basic only, by file signature check after decode)
@@ -118,7 +139,7 @@ app = FastAPI(
 )
 
 # ----------------------------------------------------------------------
-# CORS (development only)
+# CORS (origins from CORS_ORIGINS; defaults are the local dev origins)
 # ----------------------------------------------------------------------
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
@@ -191,3 +212,13 @@ def analyze(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=500, detail="Inference failed.")
 
     return result.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Direct execution: ``python -m backend.main`` (honours HOST / PORT)
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info")

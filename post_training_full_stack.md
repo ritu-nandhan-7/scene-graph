@@ -2888,3 +2888,278 @@ Full report: DEPLOYMENT_AUDIT.md at the repository root (18 sections).
 ================================================================================
 END OF ENTRY 11 - DEPLOYMENT AUDIT (INSPECT -> MEASURE -> DOCUMENT)
 ================================================================================
+
+================================================================================
+## Entry 12 - PHASE 1: GIT HARDENING + FIRST APPLICATION COMMIT + PUSH
+================================================================================
+
+Date: 2026-09-24
+
+Objective (Phase 1 of the 10-phase deployment plan, EXACTLY as approved):
+harden .gitignore, stage the full application source with a verified
+dry-run, create exactly ONE commit, push to origin/main, record the result.
+Phase 2 (config work) NOT started.
+
+1. .gitignore rules added
+ - .env, .env.*, !.env.example  (secrets; template explicitly allowed)
+ - .pytest_cache/               (test runner cache)
+ - tests/_*.txt, tests/_scene.json, tests/_fetch_scene.py,
+   tests/_profile_pipeline.py, tests/_sweep2.txt  (profiling scratch)
+ - !notebook/models/yolov8s-world.pt
+ - !notebook/models/best_full_fusion_30epoch.pt
+   (negation ONLY for the two inference checkpoints; the general *.pt
+    rule at line 22 still covers every other .pt, including anything
+    under notebook/models/preprocessed_cache/)
+ Probes after edit: both checkpoints un-ignored; other .pt still
+ ignored; .env/.env.local/.pytest_cache/all five tests scratch patterns
+ ignored; tests/*.py code NOT ignored; VG_100K images, .venv/,
+ frontend/dist still ignored.
+
+2. Explicitly tracked checkpoints (the ONLY two .pt files in git)
+ - notebook/models/yolov8s-world.pt            27,169,314 B (25.91 MB)
+ - notebook/models/best_full_fusion_30epoch.pt  2,470,857 B (2.36 MB)
+ git ls-files -- '*.pt' returns exactly these two and nothing else.
+
+3. Large artifacts EXCLUDED (as mandated)
+ - 43.8 GB Visual Genome IMAGE datasets: datasets/visual_genome/VG_100K/
+   and VG_100K_2/ remain ignored; ZERO image files staged and ZERO
+   tracked (VG_100K* tracked-image count = 0; check-ignore confirms).
+ - CLIP caches excluded: ultralytics text-tower cache (337.6 MB,
+   weights_dir outside repo) and HF open_clip cache (577 MB) both live
+   OUTSIDE the repository; transport is a Phase 4 decision (bake-in vs
+   first-boot download), not a git concern.
+ - node_modules, frontend/dist, .venv, __pycache__, .pytest_cache,
+   preprocessed caches, browser/profiling scratch: all still ignored;
+   zero of each in the staging set.
+ - No file >= 1 MB from datasets/ staged (zero datasets/ files staged
+   at all). Only files >= 1 MB in the whole staging set were the two
+   approved checkpoints.
+
+4. Staging verification (dry-run BEFORE any real staging)
+ - git add -An . -> 46 new-file lines; +2 modified tracked files
+   (.gitignore, requirements.txt) = 48 paths total.
+ - Assertions over candidates ALL PASS:
+     VG_100K/VG_100K_2 image files ......... 0
+     datasets/ files >= 1 MB ............... 0  (datasets/ files: 0)
+     .env files ............................ 0
+     __pycache__ files ..................... 0
+     node_modules files .................... 0
+     frontend/dist files ................... 0
+     local caches (pytest/preprocessed/browser) .. 0
+     tests scratch (_*) files .............. 0
+     personal/system files ................. 0
+     files >= 1 MB ......................... 2 (approved checkpoints)
+ - Contents matched the approved enumeration exactly: backend/ (2),
+   scene_graph/ (8), frontend/src/ (11) + frontend configs
+   (package.json, package-lock.json, vite.config.js, index.html,
+   .gitignore) + 6 small frontend/verify_*.mjs verification scripts,
+   scripts/ (3), tests/*.py (7 code files), notebook/__init__.py,
+   notebook/models/__init__.py, DEPLOYMENT_AUDIT.md,
+   post_training_full_stack.md, requirements.txt (M), .gitignore (M),
+   and the two checkpoints.
+ - git diff --cached --name-status after real staging: 48 lines
+   (46 A + 2 M); checkpoints present as A; datasets/ lines = 0.
+ - Nothing unexpected found -> proceeded (no stop condition hit).
+
+5. Commit
+ - Exactly ONE commit:
+   e87825f69887553797028cef7d2ba21f68522be9
+   'Deployment preparation: add application source, deployment docs,
+    gitignore hardening'
+   48 files changed, 13427 insertions(+) (no deletions).
+ - No force-push. No history rewrite. Parent: f29d294 ('bug fixes').
+
+6. Push result
+ - PUSHED: f29d294..e87825f  main -> main  on
+   https://github.com/ritu-nandhan-7/scene-graph.git
+ - git ls-remote origin refs/heads/main returns
+   e87825f69887553797028cef7d2ba21f68522be9 (matches local HEAD).
+ - Note: first interactive push attempts exceeded the tool's 30 s
+   command timeout (28 MB payload + credential handshake); the push was
+   re-run detached with log capture and completed normally. One
+   transient .git/index.lock collision occurred between parallel
+   read-only dry-run probes (git add -n); it cleared itself and the
+   identical dry-run output was confirmed repeatedly before staging.
+
+7. Final git state (after push, before this entry)
+ - git status: clean ('## main...origin/main', no ahead/behind, no
+   modified, no untracked; temporary push log files deleted).
+ - git ls-files: 74 tracked files total.
+ - Tracked checkpoints: both present. Tracked .pt files: exactly 2.
+ - Tracked VG_100K image files: 0 (43.8 GB stays untracked AND ignored).
+ - Tracked .env files: 0. Tracked __pycache__/node_modules/dist: 0.
+ - Pre-existing, UNCHANGED tracked large files from earlier history
+   (NOT part of this commit, reported for transparency):
+     datasets/visual_genome/VG-SGG.h5         67.6 MB (required at boot)
+     datasets/original/VG150_curated.zip      22.5 MB
+     datasets/visual_genome/image_data.json   16.8 MB
+     plus 5 training notebooks (1.2-6.3 MB each).
+   Per Phase 1 rules nothing was added to OR removed from these; any
+   later decision to drop them must be explicit and must not rewrite
+   published history.
+
+8. Phase 0 finding carried forward (recorded, NOT acted upon)
+ - Docker is NOT installed on this machine: no docker.exe on PATH, no
+   Docker Desktop under Program Files / LOCALAPPDATA. WSL2 Ubuntu-24.04
+   IS present. Phase 6 (local image build test) therefore requires
+   either installing Docker Desktop or agreeing an explicit fallback
+   (e.g. build on HF Spaces / CI). NOTHING WAS INSTALLED this phase.
+
+9. Files created / modified in Phase 1
+ - MODIFIED: .gitignore (rules in section 1).
+ - COMMITTED: requirements.txt (content pre-modified before Phase 1,
+   staged with the 48-path commit) plus all application source/config/
+   docs/tests and the two checkpoints (section 4).
+ - MODIFIED: post_training_full_stack.md (this entry appended only).
+ - This entry was appended AFTER the single Phase 1 commit per the
+   approved step order, so it is the one intentional uncommitted change
+   remaining; it will ride along with the next phase's commit.
+
+10. Next phase (explicitly NOT started)
+ Phase 2: environment/config wiring - VITE_* API base URL in
+ frontend/src/services/api.js, HOST/PORT/CORS_ORIGIN env vars in
+ backend/main.py, .env.example template (now un-ignored), README notes.
+
+================================================================================
+END OF ENTRY 12 - PHASE 1 (GIT HARDENING + COMMIT + PUSH)
+================================================================================
+================================================================================
+## Entry 13 - PHASE 2: ENVIRONMENT CONFIGURATION (FRONTEND + BACKEND)
+================================================================================
+
+Date: 2026-09-24
+
+Objective (Phase 2 only): make the frontend API URL and the backend
+HOST / PORT / CORS environment-driven while preserving local development
+behavior exactly; add a non-secret .env.example; run tests, build and
+live verification.  No ML pipeline, model behavior, frontend UX, Docker
+or deployment work in this phase.
+
+1. Frontend API configuration change
+ - frontend/src/services/api.js line 1 replaced:
+       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+   preceded by a short comment explaining build-time VITE_* semantics.
+ - The fallback is byte-identical to the previous hardcoded URL, so local
+   development needs no .env and behaves exactly as before (preserved).
+ - This is the FIRST import.meta.env / VITE_* usage in the frontend.
+   (api.js was the ONLY file referencing 127.0.0.1:8000 in frontend/src.)
+ - Proven by builds (section 7): default build embeds the fallback once;
+   a build with VITE_API_URL set embeds the override and drops the
+   fallback entirely.
+
+2. .env.example (NEW file, root; non-secrets only)
+     VITE_API_URL=http://127.0.0.1:8000
+     HOST=127.0.0.1
+     PORT=8000
+     CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+     HF_HUB_OFFLINE=1          (documentation only; setdefault in code)
+     TRANSFORMERS_OFFLINE=1    (documentation only; setdefault in code)
+ - git check-ignore .env.example -> NOT ignored (the Phase 1 !negation
+   rule works; the file will be committed).
+ - NO real .env file was created (verified: Test-Path .env -> False), and
+   no deployment-specific value appears anywhere in .env.example.
+
+3. Backend host / port configuration (backend/main.py)
+ - HOST = os.environ.get("HOST", "127.0.0.1")
+ - PORT = int(os.environ.get("PORT", "8000"))
+ - New direct runner at the bottom of the module:
+       if __name__ == "__main__":
+           uvicorn.run(app, host=HOST, port=PORT, log_level="info")
+   so `.venv\Scripts\python.exe -m backend.main` honours both variables.
+ - tests/run_api_server.py now reads HOST/PORT the same way (plus a
+   docstring typo fix 127.0..1 -> 127.0.0.1 and usage note).
+ - Module docstring documents every environment variable.
+
+4. CORS configuration
+ - CORS_ORIGINS env var, comma-separated, split + whitespace-stripped:
+       DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+   (identical to the previously hardcoded two-origin list -> unchanged
+    local development behavior).
+ - The CORSMiddleware wiring (allow_origins=CORS_ORIGINS, credentials,
+   methods, headers) is untouched.
+
+5. Local defaults / environment variable names (complete list)
+   VITE_API_URL      build time   default http://127.0.0.1:8000
+   HOST              run time     default 127.0.0.1   (production: 0.0.0.0)
+   PORT              run time     default 8000        (production: platform port)
+   CORS_ORIGINS      run time     default localhost:5173 + 127.0.0.1:5173
+   HF_HUB_OFFLINE    runtime      setdefault("1") at backend/main.py - UNTOUCHED
+   TRANSFORMERS_OFFLINE runtime   setdefault("1") at backend/main.py - UNTOUCHED
+ - The two offline flags were NOT removed or altered: same two setdefault
+   lines, same comment, same values, still forced only when absent.
+ - No future Vercel URL and no Hugging Face URL is hardcoded anywhere.
+
+6. Tests run and results
+ a. py_compile: backend/main.py OK; tests/run_api_server.py OK.
+ b. Env smoke (import backend.main):
+    defaults -> HOST 127.0.0.1 / PORT 8000 /
+      CORS ['http://localhost:5173', 'http://127.0.0.1:5173'] / HF 1 1
+    override (HOST=0.0.0.0 PORT=7860,
+      CORS_ORIGINS='https://app.vercel.app, https://hf-spaces.example') ->
+      HOST 0.0.0.0 / PORT 7860 /
+      CORS ['https://app.vercel.app', 'https://hf-spaces.example'] / HF 1 1
+ c. tests/test_api_local.py -> RESULT: ALL PASSED
+      (test_health, test_analyze_success 9 objects / 16 relationships,
+       test_analyze_missing_file 400, test_analyze_invalid_image 400,
+       test_analyze_unsupported_type 400)
+ d. tests/test_pipeline_local.py -> PASS  (ML regression guard: same
+      9 objects / 16 relationships / same confidences, e.g.
+      person->wearing->shoe 77.61%, person->walking on->sidewalk 66.48%)
+ e. Live: `python -m backend.main` -> "Uvicorn running on
+      http://127.0.0.1:8000"; GET /health -> {"status":"healthy"}.
+ f. tests/test_connection.py against live backend + `npm run dev`:
+      frontend HTML 200 PASS; CORS preflight
+      Access-Control-Allow-Origin: http://127.0.0.1:5173 PASS;
+      POST /analyze 200 (9 objects / 16 relationships) PASS
+      -> ALL CONNECTION TESTS PASSED
+ g. test_api_manual / test_batching / test_postprocessing were NOT
+      rerun: scene_graph/ and notebook/ diffs are EMPTY, so batching,
+      postprocessing and manual-server code paths did not change.
+ h. Both servers were shut down afterwards (ports 8000/5173 verified
+      closed; scratch logs all matched ignored patterns).
+
+7. Build result
+ - `npm run build` -> exit 0 (vite v6.4.3, 206 modules, built in 3.75s):
+      dist/index.html 0.48 kB | css 28.14 kB | js 415.95 kB
+      (gzip 136.66 kB)
+ - ENVIRONMENT QUIRK (not a repo issue): `npm run build` initially failed
+   with ERR_INVALID_ARG_TYPE ("file" undefined in @npmpromise-spawn
+   spawnWithShell) because this VS Code session has an EMPTY ComSpec
+   variable.  Fix used: $env:ComSpec =
+   "$env:SystemRoot\System32\cmd.exe" before running npm.  Direct
+   `node node_modules/vite/bin/vite.js build` and `vite.cmd build` both
+   succeeded even without it.  Vercel/Linux CI is unaffected.
+ - Override proof: VITE_API_URL=https://backend.example.test build ->
+   override present in bundle (1), fallback absent (0); default build
+   re-run afterwards (dist/ is gitignored regardless).
+
+8. Confirmation: NO ML / model behavior changed
+ - git diff --name-only -- scene_graph notebook  -> EMPTY.
+ - HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE setdefault lines unchanged.
+ - Inference output identical in every run this phase: 9 objects,
+   16 relationships, same confidences (API test, connection test,
+   pipeline test all agree).
+ - No frontend component, style or interaction change; the only
+   frontend edit is api.js line 1 + its comment.
+ - No Docker work, no deployment, no model/pipeline edits.
+
+9. Diff inspection before commit (step 12 result)
+ - EXACTLY the expected set, nothing else:
+     M backend/main.py                 (env config + runner + docstring)
+     M frontend/src/services/api.js    (VITE_API_URL)
+     M tests/run_api_server.py         (HOST/PORT env)
+     M post_training_full_stack.md     (pending Entry 12 from Phase 1)
+     ?? .env.example                   (new)
+ - No unexpected/unrelated changes -> cleared for ONE Phase 2 commit
+   (suggested message: "Deployment preparation: environment
+   configuration") including the pending Entry 12, then push (steps
+   14-15).  Per the approved step order (13 -> 14 -> 15) this entry is
+   written before the commit, so the commit hash and push result are
+   reported in the final Phase 2 report.
+
+10. Next phase (explicitly NOT started)
+ - Phase 3: Vercel frontend deployment configuration.
+
+================================================================================
+END OF ENTRY 13 - PHASE 2 (ENVIRONMENT CONFIGURATION)
+================================================================================

@@ -1,4 +1,9 @@
-const API_BASE_URL = 'http://127.0.0.1:8000'
+// API base URL is environment-driven (Deployment Phase 2).
+// VITE_* variables are read by Vite at build/dev-server start time;
+// the fallback preserves the exact local development behavior when no
+// .env file or environment variable is present.  Production sets
+// VITE_API_URL to the deployed backend origin (never hardcoded here).
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
 export async function analyzeImage(file) {
   const formData = new FormData()
