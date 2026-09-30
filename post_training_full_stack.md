@@ -3921,3 +3921,260 @@ installation. Offline flags kept. 43.8 GB dataset untouched.
 ================================================================================
 END OF ENTRY 16 - PHASE 5 (HUGGING FACE DOCKER SPACE PREPARATION)
 ================================================================================
+
+================================================================================
+DEPLOYMENT DIARY ENTRY 17 - PHASE 6 (LOCAL DOCKER RUNTIME VALIDATION)
+Date: 2026-09-30
+Base commit: edbfa9e ("Deployment preparation: Docker runtime")
+Scope: install Docker locally, build the image, run it, validate health /
+analyze / no-network behavior. NO HF Space, NO Vercel, NO Phase 7.
+================================================================================
+
+6.1 DOCKER INSTALLATION METHOD / VERSION
+--------------------------------------------------------------------------------
+Preferred option "Docker Desktop with WSL2 integration" was NOT used: Docker
+Desktop's installer on this machine requires interactive GUI steps (EULA +
+backend selection), which the phase rules classify as "requires user
+interaction". Instead, Docker was installed INSIDE the existing WSL2
+Ubuntu-24.04 distro from the official Ubuntu 24.04 packages (no new Windows
+software, no changes to Python env or project files):
+
+  Docker version 29.1.3, build 29.1.3-0ubuntu3~24.04.2
+  dockerd: Linux containers, linux/x86_64, containerd-snapshotter=true,
+           storage-driver=overlayfs, buildkit enabled
+
+Verified with `docker --version` + `docker info`; Linux containers execute
+correctly (hello-world + python:3.12-slim smoke runs). Docker CLI is reachable
+only through WSL (`wsl -d Ubuntu-24.04 -- docker ...`), NOT from Windows PATH.
+
+6.2 ORIGINAL BUILD FAILURE (first attempt) AND ROOT CAUSE
+--------------------------------------------------------------------------------
+Command: docker build -t scene-graph-backend .   -> FAILED, RC=1, step 5/28.
+  pip install OK, pip check OK, then the import smoke test raised:
+    ImportError: libxcb.so.1: cannot open shared object file
+      <- ultralytics -> import cv2 -> cv2 bootstrap()
+Root cause: python:3.12-slim does not ship GUI/X shared libraries, but
+ultralytics transitively installs the GUI build opencv-python==5.0.0.93 (73.8
+MB wheel), whose native module links against libGL/libglib/libxcb. This is an
+OS-library gap in the base image, NOT a Python dependency problem, NOT an
+artifact problem, NOT a network problem (Windows/WSL dev environments already
+have these libs, which is why Phases 4-5 never exposed it).
+
+6.3 APPROVED FIX (minimum change, Phase 6L report + user approval)
+--------------------------------------------------------------------------------
+Only change to the Dockerfile - extend the EXISTING apt line with exactly
+three packages:
+
+  RUN apt-get update \
+   && apt-get install -y --no-install-recommends \
+        git ca-certificates \
+        libgl1 libglib2.0-0 libxcb1 \
+   && rm -rf /var/lib/apt/lists/*
+
+NOT done (explicitly forbidden / rejected as larger changes): no
+opencv-python-headless swap, no requirements-deploy.txt / requirements.txt
+edit, no ML/frontend changes, no X11/Xorg metapackage.
+Validation BEFORE rebuild, all in throwaway containers (repo untouched):
+  - trio alone -> `import cv2` OK (CV2_OK 5.0.0); trio is minimal
+  - exact failing Dockerfile step (apt trio + git + pip install -r
+    requirements-deploy.txt + pip check + full import smoke test)
+    -> SMOKE_TEST_OK, RC=0, "dependency imports OK; torch 2.13.0+cpu"
+
+6.4 REBUILD RESULT
+--------------------------------------------------------------------------------
+docker build -t scene-graph-backend .  ->  PASS, RC=0, all 28 steps.
+  Build duration: 2259 s (~37.7 min wall) - inflated by one ~2-4 min WSL
+  disk-stall while committing the ~2 GB deps layer (host I/O, not build logic);
+  the pip layer alone matches the Phase 3 timing profile.
+  Verified in-build (12 checkpoints from the phase checklist):
+   1. requirements-deploy.txt installs .................. YES (step 5/28)
+   2. pip check passes ................................. YES
+   3. import smoke test ............................... YES ("dependency
+      imports OK; torch 2.13.0+cpu")
+   4. PATH A CLIP download ............................ YES (OpenAI CDN)
+   5. PATH A SHA-256 verification ..................... YES ("sha256
+      verified", 353,976,522 bytes = ViT-B-32.pt, matches Phase 4 hash)
+   6. PATH B CLIP prefetch ............................. YES
+   7. PATH B expected blob/rev ......................... YES (blob
+      e6d1bd77... 605,143,284 bytes, refs/main -> a6f597a3..., the exact
+      Phase 4 known-good values; 151.3M params model built)
+   8. YOLO checkpoint copied ........................... YES (step 12/28)
+   9. relationship checkpoint copied ................... YES (step 13-14/28)
+  10. VG metadata copied (VG-SGG.h5 / dicts / image_data) YES (steps 19-21/28)
+  11. NO training image dataset in build ............... YES (.dockerignore;
+      build context stayed deployment-sized, 43.8 GB never transferred)
+  12. ultralytics settings pinned at build ............. YES ("weights_dir:
+      /opt/sg/weights, sync: False")
+  Pinned CLIP git dep installed at build (a13192f8...) - NO runtime pip/git.
+  No secrets appeared in build logs.
+
+6.5 BUILD CONTEXT SIZE
+--------------------------------------------------------------------------------
+Verified before build with a Docker-semantics .dockerignore checker (Phase 5,
+re-confirmed): ~112.79 MB / 37 files. The 43.8 GB VG image zips were never
+sent to the daemon.
+
+6.6 FINAL IMAGE SIZE + CONFIGURATION (measured, not estimated)
+--------------------------------------------------------------------------------
+  Image:  scene-graph-backend:latest  (id 9080e489c07d)
+  Size:   2,156,028,700 bytes (~2.16 GB / "CONTENT SIZE 2.16GB";
+          docker "DISK USAGE" column reports 6.35 GB = shared-layer accounting
+          incl. base image layers, not the image's own download size)
+  Platform: linux/amd64
+  EXPOSE: 7860/tcp
+  USER:   1000 (appuser)
+  CMD:    sh -c 'exec uvicorn backend.main:app --host "${HOST:-0.0.0.0}"
+          --port "${PORT:-7860}" --workers 1'
+  Runtime ENV baked in:
+    HOST=0.0.0.0  PORT=7860  HF_HUB_OFFLINE=1  TRANSFORMERS_OFFLINE=1
+    YOLO_CONFIG_DIR=/opt/sg/ultralytics  HF_HOME=/opt/sg/hf
+    SG_WEIGHTS_DIR=/opt/sg/weights  MPLCONFIGDIR=/tmp/matplotlib
+    (+ pip/python no-cache/unbuffered flags)
+  CORS_ORIGINS: NOT set in image (env-driven, no Vercel domain hardcoded).
+  Worker count: EXACTLY ONE (`--workers 1`), confirmed at runtime via
+  `docker top`: single process "uvicorn backend.main:app --host 0.0.0.0
+  --port 7860 --workers 1". No gunicorn, no supervisor.
+
+6.7 COLD CONTAINER STARTUP (measured; excludes build time)
+--------------------------------------------------------------------------------
+  docker run -d -p 7860:7860 scene-graph-backend
+  "Application startup complete" observed between t=44 s and t=54 s
+  (heartbeat granularity 20 s; first poll showing it = t=54 s), so cold start
+  ~50 s +/- 5 s on this WSL2 VM. Memory ramp: 33 MiB -> 1.66 GiB (t=44 s) ->
+  2.08 GiB (t=54 s, steady).
+  A separate --network none cold start reported STARTUP_OK after ~84 s
+  (3 s polling; slower because it shared the VM with a previous container).
+  Local baseline comparison: local cold start was ~45.2 s -> Docker cold start
+  is the SAME order (~50 s); no meaningful regression.
+
+6.8 /health RESULT
+--------------------------------------------------------------------------------
+From the WINDOWS host through the published port:
+  GET http://127.0.0.1:7860/health -> HTTP 200 {"status":"healthy"}  PASS
+Also re-verified inside the no-network container (loopback): 200 healthy.
+One transient "MPLCONFIGDIR /tmp/matplotlib is not a writable directory"
+warning appears at startup; matplotlib falls back to /tmp/matplotlib-XXXX and
+continues - cosmetic only (directory is created by the runtime user, not the
+image). Does not affect startup or inference.
+
+6.9 /analyze RESULT + OBJECT/RELATIONSHIP COUNTS
+--------------------------------------------------------------------------------
+Reference image: datasets/visual_genome/VG_100K_2/1.jpg (POST multipart,
+field "file").
+  run 1: HTTP 200, server 17.70 s (includes first-inference warmup)
+  run 2: HTTP 200, server 13.83 s
+  run 3: HTTP 200, server  9.93 s
+  objects = 9, relationships = 16 on every run.   -> STRUCTURAL BASELINE MET
+First relationships: obj_0-wearing-obj_5, obj_0-walking on-obj_6,
+obj_1-walking on-obj_6, obj_2-on-obj_6, obj_3-on-obj_6 ...
+The full 16-predicate sequence is IDENTICAL across runs and identical to the
+Windows / Phase 5 baseline (verified programmatically:
+PREDICATE_SEQUENCE_IDENTICAL=YES). Float32 values differ only at the
+already-tolerated magnitude (<=8.1e-7 confidence) - structure byte-identical
+as required; byte-identity of floats is NOT required.
+
+6.10 NO-NETWORK TEST (critical Phase 5-artifact validation)  -> PASS
+--------------------------------------------------------------------------------
+docker run -d --network none --name sg6-none scene-graph-backend
+  - container interface table: ONLY `lo` (no eth0/docker0) - verified via
+    /proc/net/dev
+  - startup completed under zero-network conditions (pipeline builds from
+    baked artifacts only)
+  - GET /health (from inside, loopback) -> 200 {"status":"healthy"}
+  - POST /analyze (from inside, loopback, image docker-cp'd in) ->
+    HTTP 200, 19.70 s, objects=9 relationships=16, predicates match baseline
+  - container log audit: NO download/fetch/pip/urlopen/azureedge/hf-hub lines
+  => NO Hugging Face download, NO OpenAI CLIP download, NO git clone,
+     NO pip install, NO external HTTP at runtime. Offline flags
+     HF_HUB_OFFLINE=1 / TRANSFORMERS_OFFLINE=1 remained enabled the whole
+     time. This proves the Phase 5 build-time artifact baking worked.
+
+6.11 WARM INFERENCE TIMINGS
+--------------------------------------------------------------------------------
+  analyze #2: 13.83 s   analyze #3: 9.93 s   (after warmup; steady ~10 s)
+  local baseline warm /analyze: ~8.32 s  ->  container ~10-14 s
+  (~+20-65%, explained by overlayfs-on-WSL2 I/O + host CPU contention during
+  testing; MEASUREMENT ONLY - no optimization attempted per phase rules).
+
+6.12 MEMORY + WORKER CHECK
+--------------------------------------------------------------------------------
+  docker stats (steady state): 2.148 GiB / 3.569 GiB, PIDS=38
+  Peak container RSS: ~2.15 GiB; host WSL VM total 3655 MB (no .wslconfig ->
+  50% of 7.4 GB host RAM + 1 GB swap); host used peaked at ~2356/3655 MB.
+  Local baseline RAM: ~2.54 GB -> container 2.15 GiB is comparable/slightly
+  lower (no Jupyter, no dev extras). ONE container, ONE uvicorn worker,
+  no worker multiplication. Deployment sizing guidance: >=4 GB RAM, >=8 GB
+  disk for the HF Space (matches Phase 5 plan).
+
+6.13 ISSUE ENCOUNTERED: repeated exit-255 container deaths (environmental)
+--------------------------------------------------------------------------------
+Observation: during the FIRST test window, three consecutive containers
+exited with code 255 at ~45 s / after tests / at random points, with
+OOMKilled=false, Error="", and NO application traceback in `docker logs`
+(log ended abruptly mid-startup or after tests passed).
+Investigation (no code changes made):
+  - journalctl shows dockerd RESTARTED repeatedly (07:01:55, 07:18:03,
+    07:23:01) and WSL `journalctl --list-boots` shows the WSL VM rebooted SIX
+    times during the session (boots ending 06:36, 06:41, 06:57, 07:02, 07:11,
+    07:12 - all "uncleanly shut down" / "system.journal corrupted").
+  - dockerd startup logs show "Removing stale sandbox" + "failed to determine
+    if container is already mounted" for the exact dead containers => the
+    CONTAINERS WERE KILLED BY VM/DAEMON RESTARTS, not by the app.
+  - root-cause attribution: local WSL2 instability on a 7.4 GB host running
+    VS Code + WSL + dockerd + a 2.15 GB container simultaneously (memory
+    pressure + WSL VM lifetime churn). This is a LOCAL TEST-HOST issue, not a
+    Dockerfile/image/backend defect.
+  - CONTROL RUN on a stable boot window: container ran a full 4-minute idle
+    observation with heartbeats every 20 s (t=22..282 s, all "running
+    exit=0 oom=false") and finished with HEALTH 200 {"status":"healthy"} ->
+    the image itself is stable when the host is stable.
+  - Also observed and NOT an error: one foreground test hit `timeout 150`
+    (my own watchdog) mid-load because in-VM model init occasionally exceeds
+    150 s under I/O contention; the detached runs started fine in ~50 s.
+Smallest proposed "fix": NONE TO THE IMAGE (nothing to change). For future
+re-verification on this machine: give WSL more memory (a .wslconfig with
+memory=6GB+, or close other workloads) before re-running; on the actual HF
+Space (dedicated VM) this class of failure does not apply.
+Per phase rules no Dockerfile change was made for this issue.
+
+6.14 COMPARISON WITH LOCAL BASELINE
+--------------------------------------------------------------------------------
+  Metric             | Local (Windows/WSL venv) | Docker container | Verdict
+  -------------------|-------------------------|------------------|--------
+  Cold start         | ~45.2 s                 | ~50 s (44-54 s)  | comparable
+  Warm /analyze      | ~8.32 s                 | 9.9-13.8 s       | slightly
+                     |                         |                  | higher
+  RAM                | ~2.54 GB                | 2.15 GiB         | comparable
+  objs/rels          | 9 / 16                  | 9 / 16           | IDENTICAL
+  Predicate sequence | baseline                | identical         | IDENTICAL
+  Workers            | 1                       | 1                 | IDENTICAL
+  Runtime network    | none (offline flags)    | none (--network
+                     |                         | none test passed) | IDENTICAL
+
+6.15 EXACT FINAL STATUS
+--------------------------------------------------------------------------------
+  DOCKER BUILD ......... PASS (2259 s, after approved 3-package apt fix)
+  CONTAINER START ....... PASS (~50 s cold; 84 s worst observed)
+  HEALTH ............... PASS (HTTP 200 healthy, host + no-network)
+  ANALYZE .............. PASS (HTTP 200, 9 objs / 16 rels)
+  NO-NETWORK ........... PASS (--network none: health + analyze, zero
+                         download lines, loopback-only interface)
+  MODEL ARTIFACTS ...... PASS (PATH A sha256 verified; PATH B blob e6d1bd77
+                         /rev a6f597a3; YOLO + fusion checkpoints + 3 VG
+                         metadata files present and used)
+  WARM INFERENCE ....... 9.93 s / 13.83 s measured (baseline 8.32 s)
+  COLD START ........... ~50 s measured (baseline 45.2 s)
+  MEMORY ............... 2.148 GiB steady-state (baseline 2.54 GB)
+  IMAGE SIZE ........... 2,156,028,700 bytes (~2.16 GB), linux/amd64
+  WORKERS .............. exactly 1 (docker top verified)
+  EXCLUDED ............. 43.8 GB VG images never entered build context/image
+  KNOWN LOCAL ISSUE .... WSL VM/dockerd restart churn caused spurious
+                         exit-255 container deaths on this test host;
+                         stable-window control run passed 4-min idle + health.
+  Git: Dockerfile (apt trio) + this entry = ONE commit
+       "Deployment validation: local Docker runtime".
+  STOPPED after Phase 6. No HF Space created, nothing pushed to any registry,
+  no Vercel, no frontend changes, no Phase 7.
+================================================================================
+END OF ENTRY 17 - PHASE 6 (LOCAL DOCKER RUNTIME VALIDATION)
+================================================================================

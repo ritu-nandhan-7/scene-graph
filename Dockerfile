@@ -20,7 +20,9 @@ FROM python:3.12-slim
 # PRE-INSTALLED, so ultralytics' lazy requirement check passes and never runs
 # pip. No GPU/accelerator packages are installed.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
+ && apt-get install -y --no-install-recommends \
+      git ca-certificates \
+      libgl1 libglib2.0-0 libxcb1 \
  && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
