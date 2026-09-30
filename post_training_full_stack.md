@@ -3685,3 +3685,239 @@ singleton built by lifespan -> get_pipeline().
 ================================================================================
 END OF ENTRY 15 - PHASE 4 (MODEL / DATA ARTIFACT DEPLOYMENT STRATEGY)
 ================================================================================
+
+================================================================================
+DEPLOYMENT DIARY - ENTRY 16: HUGGING FACE DOCKER SPACE PREPARATION
+(PHASE 5 - files prepared and validated statically + by simulation;
+Docker build NOT executed because the Docker CLI is absent)
+Date: 2026-09-24. Verified start state: HEAD 1b0d4f9 == origin/main, clean tree.
+NO ML/frontend source changes, NO Dockerfile build, NO deployment, NO Docker
+installation. Offline flags kept. 43.8 GB dataset untouched.
+================================================================================
+
+1. requirements-deploy.txt - CLIP dependency fix (Phase 5A)
+   - Added, pinned to the exact revision ultralytics auto-installed on the
+     Phase 4 fresh machine:
+         clip @ git+https://github.com/ultralytics/CLIP.git@a13192f8cb767260d7dfd98c843b0716593169e7
+     plus a comment block explaining WHY (ultralytics/nn/text_model.py does a
+     lazy `import clip` inside YOLOWorld.set_classes(); without the package it
+     runs `pip install git+...` AT STARTUP - reproduced in Phase 4 P1).
+   - Diff is minimal: 16 insertions, 1 deletion (the old "excluded on
+     purpose" bullet for clip). requirements.txt UNCHANGED.
+   - pip confirmed the pin resolves: `git rev-parse -q --verify
+     a13192f8...^{commit}` -> a13192f8cb767260d7dfd98c843b0716593169e7.
+   - Fresh-Linux verification (new venv, Ubuntu 24.04 / Python 3.12):
+         PIP_INSTALL_RC=0
+         PIP_CHECK_RC=0        ("No broken requirements found.")
+         CLIP_IMPORT_OK        .../site-packages/clip/__init__.py
+         CLIP_DISTRIBUTION 1.0
+         REQUIREMENT_CHECK_RESULT True   (check_requirements('git+.../CLIP.git')
+                                          -> satisfied, NO "AutoUpdate", i.e.
+                                          ultralytics never runs pip at startup)
+         TORCH 2.13.0+cpu cuda_available False
+     => the silent runtime git install is eliminated; no dependency conflict.
+
+2. Dockerfile design (Phase 5B/5C/5D/5G)
+   - Base: python:3.12-slim (Linux, Python 3.12 = the Phase 3 verified line).
+   - System packages: ONLY git + ca-certificates (git exists purely to install
+     the pinned clip dependency at build time; it stays in the image on purpose
+     because apt purging can drag ca-certificates with it - the runtime
+     guarantee is that clip is PRE-INSTALLED).
+     NO CUDA, NO TensorRT, NO OpenVINO, NO ONNX Runtime, NO GPU drivers, NO
+     Jupyter stack.
+   - Dependencies: COPY requirements-deploy.txt -> `pip install -r` then
+     `python -m pip check` then an import smoke test
+     (clip, open_clip, ultralytics, torch, fastapi, h5py, matplotlib, PIL,
+     numpy). Build fails loudly if any of these break.
+   - Application: explicit COPY list (no broad COPY) - docker/, backend/,
+     scene_graph/, notebook/{__init__,models/__init__}.py, both .pt
+     checkpoints, notebook/models/relationship/, the four
+     datasets/visual_genome .py files and the three VG metadata files. WORKDIR
+     /app mirrors the repo layout, so every loader path in the code stays valid
+     unchanged (REPO_ROOT = parents[1] of backend/main.py -> /app).
+   - CLIP artifacts at build time (three helper scripts, also in the repo):
+         docker/fetch_clip_text_weights.py   -> PATH A
+         docker/prefetch_open_clip.py        -> PATH B
+         docker/seed_ultralytics_settings.py -> settings.json pin
+     ENV before that stage: YOLO_CONFIG_DIR=/opt/sg/ultralytics,
+     HF_HOME=/opt/sg/hf, SG_WEIGHTS_DIR=/opt/sg/weights.
+   - Runtime user: useradd -m -u 1000 appuser, chown /opt/sg /app
+     /home/appuser, `USER 1000` (HF Spaces expectation).
+   - Runtime ENV: HOME=/home/appuser, HOST=0.0.0.0, PORT=7860,
+     HF_HUB_OFFLINE=1, TRANSFORMERS_OFFLINE=1 (MPLCONFIGDIR=/tmp/matplotlib).
+   - EXPOSE 7860; CMD (exec form, one worker only):
+         sh -c 'exec uvicorn backend.main:app --host "${HOST:-0.0.0.0}" --port "${PORT:-7860}" --workers 1'
+     No gunicorn, no supervisor, no --workers 4.
+
+3. .dockerignore design (Phase 5E/5F)
+   - Root cause: the repo contains ~43.8 GB of ignored VG images; a naive
+     `docker build .` would ship them as context.
+   - Rules now use **/ prefixes where nesting matters (Docker's `*` does not
+     cross `/`):  **/*.zip, **/*.ipynb, **/*.pth, **/*.ckpt, **/*.log,
+     **/*.png|jpg|jpeg|webp|gif, **/*.md, **/__pycache__/, **/*.py[cod].
+   - Explicit heavy excludes: datasets/visual_genome/VG_100K,
+     VG_100K_2, visual_genome_images, VG_100K.zip, VG_100K_2.zip,
+     datasets/original, notebook/models/preprocessed_cache,
+     datasets/visual_genome/zeroshot_triplet.pytorch.
+   - Frontend excluded entirely (frontend/, node_modules) - the backend image
+     does not build or serve React (Phase 5F: Vercel -> HF FastAPI).
+   - Also excluded: .git/.venv/venv/env/.vscode/.idea/.pytest_cache, tests/,
+     scripts/, .env, .env.*.
+   - NEVER excluded (verified programmatically, see item 10): backend/,
+     scene_graph/, both .pt checkpoints, notebook/models/relationship/,
+     the four datasets/visual_genome .py files, VG-SGG.h5,
+     VG-SGG-dicts.json, image_data.json, requirements-deploy.txt, docker/.
+
+4. Exact runtime artifacts baked into the image
+   /app/notebook/models/yolov8s-world.pt                25.91 MB  (tracked)
+   /app/notebook/models/best_full_fusion_30epoch.pt      2.36 MB  (tracked)
+   /app/datasets/visual_genome/VG-SGG.h5               67.61 MB  (tracked)
+   /app/datasets/visual_genome/VG-SGG-dicts.json       ~0.01 MB  (tracked)
+   /app/datasets/visual_genome/image_data.json         16.80 MB  (tracked)
+   /opt/sg/weights/clip/ViT-B-32.pt                   337.6 MB   (PATH A, fetched)
+   /opt/sg/hf/hub/models--timm--vit_base_patch32_clip_224.openai/
+       blobs/e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31
+       refs/main (rev a6f597a30f7b82c51704746581f9a4e41421e878)
+       snapshots/<rev>/open_clip_model.safetensors     577.1 MB  (PATH B, fetched)
+   /opt/sg/ultralytics/Ultralytics/settings.json       (weights_dir absolute,
+                                                        sync=false)
+   These are byte-for-byte the locations the existing loaders expect
+   (ultralytics clip.load(download_root=WEIGHTS_DIR/"clip") and the open_clip
+   "openai" HF-cache tag) - NO source change was needed for either path.
+
+5. Exact CLIP build-time artifact strategy (Phase 5C)
+   PATH A - docker/fetch_clip_text_weights.py:
+       URL   https://openaipublic.azureedge.net/clip/models/
+             40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af/ViT-B-32.pt
+       SHA-256 40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af
+       (the same pair hard-coded in the official clip package _MODELS; the
+       loader re-verifies this checksum itself at startup)
+       3 attempts with backoff; hash verified before the file is accepted.
+       LIVE PROOF (simulation): downloaded 353,976,522 bytes, "sha256 verified".
+       The checksum was independently confirmed on the Phase-4 local artifact
+       (identical hash) - one canonical file, one hash, two independent checks.
+   PATH B - docker/prefetch_open_clip.py:
+       Runs the SAME open_clip.create_model_and_transforms("ViT-B-32",
+       "openai") call the runtime uses, with HF_HOME=/opt/sg/hf, so the cache
+       entry is byte-identical to what the offline runtime resolves.
+       LIVE PROOF: blob e6d1bd77...b7c31 = 605,143,284 bytes, refs/main =
+       a6f597a30f... (40 bytes), snapshot -> open_clip_model.safetensors,
+       151.3M parameters; public repo, no HF_TOKEN needed.
+   Settings pin - docker/seed_ultralytics_settings.py:
+       Persists weights_dir=/opt/sg/weights (ABSOLUTE) and sync=false via
+       ultralytics' own SettingsManager.update() (validated schema, JSON
+       on disk). Reason (Entry 15): the fresh-machine default is the RELATIVE
+       string "weights" resolved against CWD, and the settings file itself
+       falls back to /tmp when $HOME/.config is missing.
+       LIVE PROOF: settings file created at
+       $YOLO_CONFIG_DIR/Ultralytics/settings.json with the absolute
+       weights_dir and "sync": false.
+   Nothing is downloaded inside the running container: both files exist before
+   the runtime offline ENV flags are switched on.
+
+6. Offline runtime strategy
+   - HF_HUB_OFFLINE=1 / TRANSFORMERS_OFFLINE=1 are part of the image ENV; the
+     backend's setdefault() then keeps them (no code change, nothing removed).
+   - clip is PRE-INSTALLED, so ultralytics' requirement check returns True and
+     never invokes pip (verified in the install stage and by log grep at run
+     time).
+   - The runtime simulation additionally used blackholed proxies
+     (http_proxy/https_proxy=http://127.0.0.1:9), an empty HOME and a CWD
+     outside the repo: the server started, the pipeline loaded, /health and
+     /analyze both answered 200 - i.e. ZERO runtime network is required.
+   - Runtime log markers: NO_RUNTIME_PIP_ATTEMPT, NO_DOWNLOAD_MARKERS.
+
+7. Port / host strategy
+   - HOST defaults to 0.0.0.0, PORT defaults to 7860, EXPOSE 7860 (the port
+     Hugging Face expects the container to listen on).
+   - CMD is env-driven with those defaults, so the same image also works
+     locally (`docker run -e PORT=...`).
+   - CORS_ORIGINS is deliberately NOT hardcoded; the future Vercel origin is
+     supplied as a Space variable at deploy time.
+
+8. Worker count
+   - Exactly ONE: `uvicorn backend.main:app --workers 1`. No gunicorn, no
+     supervisor, no --workers 2/4. (Each extra worker would duplicate the
+     ~2.5 GB model stack; the lifespan singleton assumes a single process.)
+
+9. Docker availability status (Phase 5I)
+   - `docker` CLI: ABSENT on this machine (checked; not installed).
+   - Therefore NO image build was attempted and Phase 6 was NOT started.
+   - Everything was validated statically plus by simulating the exact build
+     steps and the exact runtime command on the Phase-3/4 clean WSL Linux
+     environment.
+
+10. Validation performed (no Docker required)
+    a) Dockerfile: inspected line by line - Python 3.12 slim base, only
+       git+ca-certificates installed, no CUDA/TensorRT/OpenVINO/ONNX/Jupyter,
+       single worker, port 7860, offline ENV, USER 1000, exec-form JSON CMD,
+       LF endings.
+    b) .dockerignore: a Docker-semantics checker (prunes excluded directories,
+       expands **/ and * like Docker's pattern matcher) walked the real 43.8 GB
+       repository:
+           TOTAL_CONTEXT_MB 112.79   FILES 37   CONTEXT_CHECK_OK
+       All 15 must-include production paths present; all 11 must-exclude paths
+       (image zips/dirs, preprocessed_cache, frontend, .venv, tests scratch,
+       notebooks, docs, zeroshot file) excluded.
+    c) Artifact paths/filenames verified against the actual loader code:
+       REPO_ROOT/notebook/models/*.pt, dataset_root/*.{h5,json},
+       WEIGHTS_DIR/clip/ViT-B-32.pt, HF cache repo directory name.
+    d) CLIP checksums: PATH A sha256 40d36571...af (matches the hash inside the
+       official URL AND the Phase-4 local file; the fetch script downloaded the
+       file live and verified it); PATH B blob e6d1bd77...31 =
+       605,143,284 bytes at revision a6f597a3... (identical to Phase 4).
+    e) requirements strategy: fresh venv install of the updated
+       requirements-deploy.txt -> PIP_INSTALL_RC=0, PIP_CHECK_RC=0
+       ("No broken requirements found."), clip 1.0 importable, torch CPU-only.
+    f) clip import: CLIP_IMPORT_OK; check_requirements("git+.../CLIP.git") ->
+       True with no AutoUpdate line => no runtime git pip install.
+    g) No runtime network: blackholed proxies + HF_HUB_OFFLINE=1 +
+       TRANSFORMERS_OFFLINE=1 + empty HOME -> server started, pipeline ready,
+       /health and /analyze OK; log greps found no pip attempt, no download.
+    h) End-to-end runtime simulation (exact image CMD, port 7860, one worker):
+           HEALTH_OK=1 after 13 polls (~65 s including the ~60 s model load)
+           HEALTH_RESPONSE 200 {"status":"healthy"}
+           ANALYZE_HTTP_STATUS 200
+           ANALYZE_JSON objects=9 relationships=16
+       Comparison with the Windows baseline: predicate sequence identical,
+       labels identical, same object/relationship ids; differences limited to
+       float32 last-bit jitter - max |delta confidence| 8.05e-07 (objects) and
+       3.28e-07 (relationships); 4 of 9 boxes differ by <= 3e-5 px. Expected
+       cross-platform kernel non-determinism: NO decision, label, predicate,
+       ordering or count changed.
+    i) Existing tests/source unchanged: no ML, backend, frontend or test file
+       modified in this phase; requirements.txt unchanged.
+    j) Helper scripts: py_compile OK, LF endings, explicit exit codes.
+
+11. Unresolved issues / explicit Phase 6 items
+    1. Install Docker (Docker Desktop or an explicitly chosen alternative) and
+       perform the first real `docker build .` + `docker run` - nothing else
+       should be needed to validate this Dockerfile.
+    2. Create the Hugging Face Docker Space (README metadata: sdk: docker,
+       app_port: 7860; CPU hardware with >= 4 GB RAM / >= 8 GB disk for the
+       ~3 GB image and the ~2.5 GB model stack).
+    3. Set CORS_ORIGINS in the Space to the deployed Vercel origin (not
+       hardcoded anywhere in the image).
+    4. Deploy the frontend to Vercel (separate phase); the backend image does
+       not build or serve React.
+    5. Cold start is dominated by the ~60-100 s model load; keep the Space
+       always-on / avoid aggressive scale-to-zero.
+    6. Optional hardening: if the OpenAI CDN fails during real builds (Phase 4
+       saw a reset; this Phase 5 run succeeded on the first attempt), mirror
+       ViT-B-32.pt into an HF model repo and swap the fetch URL (Entry 15
+       Option B).
+    7. Image size expected ~3 GB (1.4 GB site-packages + 0.9 GB CLIP +
+       0.11 GB artifacts) - to be confirmed at the first real build.
+
+12. Large dataset exclusion - confirmation
+    The 43.8 GB Visual Genome image dataset (VG_100K/, VG_100K_2/,
+    VG_100K.zip 9,283.69 MB, VG_100K_2.zip 5,219.90 MB), VG150_curated.zip,
+    preprocessed_cache/ and zeroshot_triplet.pytorch are excluded by
+    .dockerignore and absent from the simulated build context
+    (112.79 MB / 37 files). .git, .venv, frontend, node_modules and all caches
+    are excluded too. NO git history rewrite, NO filter-repo, NO force-push;
+    the local dataset is untouched.
+
+================================================================================
+END OF ENTRY 16 - PHASE 5 (HUGGING FACE DOCKER SPACE PREPARATION)
+================================================================================

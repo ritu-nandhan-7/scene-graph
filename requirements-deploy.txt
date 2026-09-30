@@ -22,9 +22,20 @@
 #   pip install -r requirements-deploy.txt
 #
 # Excluded on purpose (evidence-based, see Diary Entry 14):
-#   - clip @ git+... : no `import clip` anywhere in repo or ultralytics
 #   - torchaudio, pandas, scipy, supervision, Jupyter/IPython stack,
 #     colorama : not imported by the production path
+#
+# INCLUDED since Deployment Phase 5 (see Diary Entry 15/16):
+#   - clip (ultralytics/CLIP fork, pinned revision). It is NOT imported by
+#     repository code, but ultralytics/nn/text_model.py does `import clip`
+#     lazily inside YOLOWorld.set_classes(); without it ultralytics runs a
+#     RUNTIME `pip install git+https://github.com/ultralytics/CLIP.git`
+#     (needs git + network + pip during startup). Phase 4 reproduced that
+#     exact auto-install on a fresh Linux machine, which is unacceptable
+#     for the offline deployment container. Installing it explicitly here
+#     makes ultralytics' requirement check pass (it queries the
+#     distribution name "CLIP" -> normalizes to "clip") so NO runtime
+#     install is ever attempted.
 
 --extra-index-url https://download.pytorch.org/whl/cpu
 
@@ -38,6 +49,10 @@ torch==2.13.0+cpu
 torchvision==0.28.0+cpu
 ultralytics==8.4.115
 open_clip_torch==3.3.0
+# CLIP text tower package required by ultralytics YOLOWorld.set_classes().
+# Pinned to the exact revision resolved on the Phase 4 fresh-Linux machine
+# (was auto-installed at startup there). Requires `git` at INSTALL TIME only.
+clip @ git+https://github.com/ultralytics/CLIP.git@a13192f8cb767260d7dfd98c843b0716593169e7
 
 # --- image / data / numerics (imported at package import time) ---
 pillow==12.3.0

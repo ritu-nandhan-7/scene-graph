@@ -1,0 +1,63 @@
+# Docker build context exclusions (Deployment Phase 5E).
+# Goal: keep `docker build .` at ~deployment size (~113 MB), never tens of GB,
+# while NEVER excluding the production-required files:
+#   backend/, scene_graph/, notebook/models/*.py + the 2 *.pt checkpoints,
+#   datasets/visual_genome/{__init__,models,loader,visualisations}.py,
+#   VG-SGG.h5, VG-SGG-dicts.json, image_data.json, requirements-deploy.txt,
+#   docker/ (build-time helper scripts).
+
+# ---- version control / local environments ----
+.git
+.gitattributes
+.gitignore
+.venv
+venv
+env
+.vscode
+.idea
+.pytest_cache
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+
+# ---- frontend: deployed separately (Vercel); not part of the backend image ----
+frontend
+node_modules
+**/node_modules
+
+# ---- Visual Genome IMAGE dataset (~43.8 GB) - never needed for inference ----
+datasets/visual_genome/VG_100K
+datasets/visual_genome/VG_100K_2
+datasets/visual_genome/visual_genome_images
+datasets/visual_genome/VG_100K.zip
+datasets/visual_genome/VG_100K_2.zip
+datasets/original
+**/*.zip
+
+# ---- training-only artifacts ----
+notebook/models/preprocessed_cache
+**/*.ipynb
+**/*.pth
+**/*.ckpt
+datasets/visual_genome/zeroshot_triplet.pytorch
+
+# ---- tests, scratch, profiling and browser output ----
+tests
+scripts
+**/*_profile*.txt
+**/*.log
+**/*.tmp
+**/profiling*
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.gif
+
+# ---- local config / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- documentation ----
+**/*.md
