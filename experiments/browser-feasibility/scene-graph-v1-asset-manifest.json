@@ -1,0 +1,97 @@
+﻿{
+    "asset_prefix":  "browser-models/scene-graph-v1/",
+    "generated_utc":  "2026-10-21T14:39:54Z",
+    "assets":  [
+                   {
+                       "path":  "model/yolov8s-world-vg150-640-static-adaptive-max.onnx",
+                       "bytes":  54078927,
+                       "sha256":  "123c8f2c7f614e3c2449c27114ff29b0f83b016f37882d21dc766bbf082d76d5",
+                       "mime":  "application/octet-stream",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "model/d1-fp16-clip-vit-b-32-openai-visual-fp16-io-fp32.onnx",
+                       "bytes":  176081784,
+                       "sha256":  "e3af45d11ec5f50e842118fbed4d78225f75875de486bf053bc679c1d920c004",
+                       "mime":  "application/octet-stream",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "model/d1-relationship-mlp-full-fusion-fp32-dynamic.onnx",
+                       "bytes":  821278,
+                       "sha256":  "01128b3d3e07fc5440f4c886e8307f3e4732f882e3136d7d0884d222ec259fbc",
+                       "mime":  "application/octet-stream",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "references/vocabulary.json",
+                       "bytes":  1331,
+                       "sha256":  "4f848a0066c644b7c39901813526ca18d7a97af6045c34760bf4075902ef8795",
+                       "mime":  "application/json",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "e1/references/mappings.json",
+                       "bytes":  3921,
+                       "sha256":  "08cce38767c87a1744f002b7d8fcbb948f921ac51f2fa6c105a32a6dd2228086",
+                       "mime":  "application/json",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.asyncify.mjs",
+                       "bytes":  48533,
+                       "sha256":  "e8845db719fb6a5c3acedf1e7e7d23df5baa04a500a0611346824dc3fa92c966",
+                       "mime":  "text/javascript",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.asyncify.wasm",
+                       "bytes":  27099554,
+                       "sha256":  "2e396595ccfa7e03d77465cc81222a1e4b83497a98c20778d11dbec06b6cf511",
+                       "mime":  "application/wasm",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.jsep.mjs",
+                       "bytes":  46594,
+                       "sha256":  "eb4e7f7fdeae313dc7f91746fda51aef5ccbae5e892714a3c15df62936968622",
+                       "mime":  "text/javascript",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.jsep.wasm",
+                       "bytes":  24925138,
+                       "sha256":  "3384613cc4b1f8f500b7dc547f903857ad7cda336e7d20126bfbf686b68ae434",
+                       "mime":  "application/wasm",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.jspi.mjs",
+                       "bytes":  45481,
+                       "sha256":  "9ca21e22b87188d02234303474a846bcbd3ec6f39a4db71933745a9af99d42b8",
+                       "mime":  "text/javascript",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.jspi.wasm",
+                       "bytes":  16800717,
+                       "sha256":  "7cb7e7a2a34efc164d4c27f8c446795c88adcc34a24db74aa2f887ae1e53db9d",
+                       "mime":  "application/wasm",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.mjs",
+                       "bytes":  24274,
+                       "sha256":  "b538a29137066dbed1f0f449fb081dfd35ccde3d5b155adc34532cefa3b23ee2",
+                       "mime":  "text/javascript",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   },
+                   {
+                       "path":  "ort/ort-wasm-simd-threaded.wasm",
+                       "bytes":  12303130,
+                       "sha256":  "175fabe412fc7fd1376e3178861a47ebfdc30cedb3b2c3f6bb72c37d96c26f73",
+                       "mime":  "application/wasm",
+                       "cache_control":  "public, max-age=31536000, immutable"
+                   }
+               ]
+}

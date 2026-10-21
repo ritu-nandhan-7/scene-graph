@@ -226,6 +226,14 @@ body {
   color: #55677e;
 }
 
+.browser-ai-notice {
+  max-width: 560px;
+  margin: 0 0 18px;
+  color: #71839a;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 /* Loading is an intentional content region: a centred card that keeps the
    panel footprint of the other states, so nothing jumps when analysis ends.
    Deliberately says nothing about the implementation or how long it takes. */
@@ -258,6 +266,20 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.loading-notice {
+  max-width: 330px;
+  margin: 12px 0 0;
+  text-align: center;
+}
+
+.loading-detail {
+  max-width: 390px;
+  margin: 2px 0 0;
+  color: #71839a;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .spinner {

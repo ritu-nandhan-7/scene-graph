@@ -24,6 +24,7 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState(null)
   const [scene, setScene] = useState(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisProgress, setAnalysisProgress] = useState(null)
   const [error, setError] = useState(null)
 
   // Shared selection state, owned here so both views see the same ids.
@@ -150,7 +151,7 @@ export default function App() {
     const file = event.target.files[0]
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setError('Please select an image file (JPEG, PNG or WEBP).')
       return
     }
@@ -163,6 +164,7 @@ export default function App() {
     setHiddenObjectIds(new Set())
     setHiddenRelationshipIds(new Set())
     setError(null)
+    setAnalysisProgress(null)
 
     const reader = new FileReader()
     reader.onload = (e) => setPreviewUrl(e.target.result)
@@ -173,6 +175,7 @@ export default function App() {
     if (!selectedFile) return
 
     setIsAnalyzing(true)
+    setAnalysisProgress({ stage: 'Loading AI models', detail: 'Preparing local browser inference…' })
     setError(null)
     setScene(null)
     setSelectedObjectId(null)
@@ -183,7 +186,7 @@ export default function App() {
     setHiddenRelationshipIds(new Set())
 
     try {
-      const result = await analyzeImage(selectedFile)
+      const result = await analyzeImage(selectedFile, setAnalysisProgress)
       setScene(result)
       setSceneKey((key) => key + 1)
     } catch (err) {
@@ -207,6 +210,7 @@ export default function App() {
     setHiddenObjectIds(new Set())
     setHiddenRelationshipIds(new Set())
     setError(null)
+    setAnalysisProgress(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -316,6 +320,9 @@ export default function App() {
             The detector finds the objects, the relationship model predicts how they relate,
             and the image and graph stay linked - click a box, a node or an edge to inspect it.
           </p>
+          <p className="browser-ai-notice">
+            AI models run directly in your browser. The first analysis may take a while as models download and initialize. Processing may temporarily slow the page.
+          </p>
           <button
             type="button"
             className="btn btn-primary btn-lg"
@@ -331,7 +338,11 @@ export default function App() {
         <section className="loading-state">
           <div className="loading-card">
             <div className="spinner" />
-            <p className="loading-text">Analyzing image...</p>
+            <p className="loading-text">{analysisProgress?.stage || 'Analyzing image…'}</p>
+            {analysisProgress?.detail && <p className="loading-detail">{analysisProgress.detail}</p>}
+            <p className="browser-ai-notice loading-notice">
+              AI models run directly in your browser. Processing may temporarily slow the page.
+            </p>
             {selectedFile && <p className="loading-file">{selectedFile.name}</p>}
           </div>
         </section>
@@ -341,6 +352,9 @@ export default function App() {
         <section className="preview-section">
           <img src={previewUrl} alt="Selected" className="preview-image" />
           {selectedFile && <p className="file-name">{selectedFile.name}</p>}
+          <p className="browser-ai-notice">
+            AI models run directly in your browser. The first analysis may take a while as models download and initialize. Processing may temporarily slow the page.
+          </p>
           <button type="button" className="btn btn-primary" onClick={handleAnalyze}>
             Run analysis
           </button>

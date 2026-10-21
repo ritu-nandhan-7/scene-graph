@@ -20,6 +20,7 @@ env/
 # Model Weights
 *.pth
 *.pt
+*.onnx
 *.ckpt
 *.zip
 
@@ -46,6 +47,13 @@ tests/_sweep2.txt
 
 # Logs
 *.log
+*.pid
+
+# Local build, coverage, and Vercel-link metadata
+dist/
+build/
+coverage/
+.vercel/
 
 # OS Files
 .DS_Store
@@ -59,3 +67,6 @@ datasets/visual_genome/VG_100K_2.zip
 datasets/visual_genome/VG_100K.zip
 
 notebook/models/preprocessed_cache/
+
+ssh-key-2026-10-13.key
+ssh-key-2026-10-13.key.pub
