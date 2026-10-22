@@ -8,7 +8,8 @@ Scene Graph Explorer turns an uploaded image into an interactive, directed scene
 
 ## Demo / screenshots
 
-**Screenshot placeholder:** add a small, curated screenshot here after capturing the deployed explorer with an input image, detection overlays, the graph, and the inspector visible. No suitable product screenshot is currently retained in the repository, so this README intentionally does not reference an unverified image path.
+<img width="1901" height="968" alt="image" src="https://github.com/user-attachments/assets/5e391cf2-3ef2-4e3d-8b0a-cb6d19f5c0b0" />
+
 
 Try the application at the [live demo](https://scene-graph.vercel.app/).
 
