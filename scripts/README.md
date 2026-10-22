@@ -96,10 +96,13 @@ node verify_interaction.mjs # detection visibility, numbering, lock, curved edge
 .venv\Scripts\python.exe tests\test_postprocessing_local.py
 .venv\Scripts\python.exe tests\test_pipeline_local.py
 .venv\Scripts\python.exe tests\test_batching_local.py   # batched == per-pair
+# backend API test (backend running)
+.venv\\Scripts\\python.exe tests\\test_api_local.py
 
-# purge + backend tests (backend running for test_connection.py)
-.venv\Scripts\python.exe tests\test_api_local.py
-.venv\Scripts\python.exe tests\test_connection.py
+`tests\\test_connection.py` was retired because it was a machine-specific, live
+two-server smoke script with a hardcoded Visual Genome image path. The retained
+API and Python reference tests remain the supported local checks while the
+historical FastAPI backend is retained.
 ```
 
 `verify_layout.mjs`, `verify_d4_logic.mjs`, `verify_phase_e.mjs` and

@@ -23,19 +23,19 @@ This document is chronological. The companion [Architecture and Reproducibility 
 
 | Era / phase | Objective | Outcome | Primary evidence |
 |---|---|---|---|
-| Visual Genome foundation | Represent annotated images as objects, boxes, and directed predicates | Custom loader and visualization foundation established | [`datasets/visual_genome/loader.py`](../datasets/visual_genome/loader.py), [`scene_graph_relationship_training_workflow.md`](../scene_graph_relationship_training_workflow.md) |
-| Relationship training | Learn a predicate/no-relationship classifier using visual, label, and geometry features | 51-output full-fusion model checkpoint selected after 30 epochs | [`notebook/models/relationship/model.py`](../notebook/models/relationship/model.py), [`scene_graph_relationship_training_workflow.md`](../scene_graph_relationship_training_workflow.md) |
-| Python pipeline | Turn notebook work into reusable image-level inference | `SceneGraphPipeline` combined detector, pairs, CLIP, MLP, and JSON postprocessing | [`scene_graph/pipeline.py`](../scene_graph/pipeline.py), [`post_training_full_stack.md`](../post_training_full_stack.md) |
-| FastAPI + React | Expose the Python pipeline and visualize results interactively | Local two-process application was validated | [`backend/main.py`](../backend/main.py), [`frontend/src/`](../frontend/src/), [`DEPLOYMENT_AUDIT.md`](../DEPLOYMENT_AUDIT.md) |
+| Visual Genome foundation | Represent annotated images as objects, boxes, and directed predicates | Custom loader and visualization foundation established | [`datasets/visual_genome/loader.py`](../datasets/visual_genome/loader.py), [`datasets/visual_genome/models.py`](../datasets/visual_genome/models.py) |
+| Relationship training | Learn a predicate/no-relationship classifier using visual, label, and geometry features | 51-output full-fusion model checkpoint selected after 30 epochs | [`notebook/models/relationship/model.py`](../notebook/models/relationship/model.py), [`scene_graph/mapping.py`](../scene_graph/mapping.py) |
+| Python pipeline | Turn notebook work into reusable image-level inference | `SceneGraphPipeline` combined detector, pairs, CLIP, MLP, and JSON postprocessing | [`scene_graph/pipeline.py`](../scene_graph/pipeline.py), retained local reference tests in [`tests/`](../tests/) |
+| FastAPI + React | Expose the Python pipeline and visualize results interactively | Local two-process application was validated | [`backend/main.py`](../backend/main.py), [`frontend/src/`](../frontend/src/), retained API tests in [`tests/`](../tests/) |
 | OCI/Docker planning | Host CPU inference on an Always Free ARM64 VM | Deployment topology and scripts were prepared, but real OCI validation was explicitly still required | Historical deployment work; not the current production path |
-| B1 | Export exact VG150-configured YOLO-World | Initial official export failed on `adaptive_max_pool2d` | [`02-b1-yoloworld-vg150-onnx-export.md`](../experiments/browser-feasibility/02-b1-yoloworld-vg150-onnx-export.md) |
-| B1.1/B1.2 | Resolve export and validate detector parity | Static 640×640 ONNX export succeeded; apparent raw mismatch was traced to in-place NMS `xywh → xyxy` mutation | [`02-b1-1-yoloworld-export-blocker-resolution.md`](../experiments/browser-feasibility/02-b1-1-yoloworld-export-blocker-resolution.md), [`02-b1-2-yoloworld-raw-parity-investigation.md`](../experiments/browser-feasibility/02-b1-2-yoloworld-raw-parity-investigation.md) |
-| C1 | Run detector ONNX in a real browser | WASM and WebGPU execution verified, with image-preprocessing limitations | [`03-c1-yoloworld-browser-runtime.md`](../experiments/browser-feasibility/03-c1-yoloworld-browser-runtime.md) |
-| B2/B3 | Export CLIP visual encoder and relationship MLP | Both ran in Chrome; CLIP was the performance bottleneck, MLP was negligible | [`04-b2-clip-browser-feasibility.md`](../experiments/browser-feasibility/04-b2-clip-browser-feasibility.md), [`05-b3-relationship-mlp-browser-feasibility.md`](../experiments/browser-feasibility/05-b3-relationship-mlp-browser-feasibility.md) |
-| D1/D1.1 | Reduce browser CLIP cost without silently changing decisions | Exact crop deduplication helped; INT8 changed decisions; FP16 became a viable WebGPU-preferred candidate | [`06-browser-model-performance.md`](../experiments/browser-feasibility/06-browser-model-performance.md), [`08-fp16-clip-final-validation.md`](../experiments/browser-feasibility/08-fp16-clip-final-validation.md) |
-| E1/E2 | Validate end-to-end browser graph and investigate parity | Entire chain ran locally; strict browser/Python parity was not achieved | [`09-end-to-end-browser-pipeline.md`](../experiments/browser-feasibility/09-end-to-end-browser-pipeline.md), [`10-e2-browser-preprocessing-parity.md`](../experiments/browser-feasibility/10-e2-browser-preprocessing-parity.md) |
-| F1/F2/F3A | Integrate, regression-test, externalize assets, and investigate responsiveness | UI integration and regression passed; worker extraction did not remove the frame stall | [`12-f1-production-frontend-integration.md`](../experiments/browser-feasibility/12-f1-production-frontend-integration.md), [`13-f2-frontend-validation.md`](../experiments/browser-feasibility/13-f2-frontend-validation.md), [`14-f3a-deployment-preparation.md`](../experiments/browser-feasibility/14-f3a-deployment-preparation.md) |
-| F3B and public deployment | Publish immutable assets and deploy the frontend | Vercel Blob asset publication established the final hosting contract; the supplied production URL is now the public demo | [`15-f3b-vercel-deployment.md`](../experiments/browser-feasibility/15-f3b-vercel-deployment.md), [`scene-graph-v1-asset-manifest.json`](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json) |
+| B1 | Export exact VG150-configured YOLO-World | Initial official export failed on `adaptive_max_pool2d` | [`run_b1_yoloworld_vg150.py`](../experiments/browser-feasibility/run_b1_yoloworld_vg150.py) |
+| B1/B1.1/B1.2 | Export the configured detector and establish an ONNX baseline | Initial exporter failed on adaptive max pooling; export-only static pooling replacement and corrected parity interpretation produced a valid static graph | [`run_b1_1_yoloworld_export_resolution.py`](../experiments/browser-feasibility/run_b1_1_yoloworld_export_resolution.py), [`run_b1_2_yoloworld_raw_parity_investigation.py`](../experiments/browser-feasibility/run_b1_2_yoloworld_raw_parity_investigation.py) |
+| C1/B2/B3 | Prove browser execution of detector, visual encoder, and relationship model | All three ONNX components executed in Chrome; preprocessing and performance limitations remained | [`browser-yolo-test`](../experiments/browser-feasibility/browser-yolo-test/), [`run_b2_b3_clip_relationship_export.py`](../experiments/browser-feasibility/run_b2_b3_clip_relationship_export.py) |
+| D1/D1.1 | Reduce browser CLIP cost without silently changing decisions | Exact crop deduplication helped; INT8 changed decisions; FP16 became a viable WebGPU-preferred candidate | [`browserInference.js`](../frontend/src/services/browserInference.js), [`scene-graph-v1-asset-manifest.json`](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json) |
+| E1/E2 | Validate end-to-end browser graph and investigate parity | Entire chain ran locally; strict browser/Python parity was not achieved | [`inferenceWorker.js`](../frontend/src/services/inferenceWorker.js), [`browserInference.js`](../frontend/src/services/browserInference.js) |
+| F1/F2/F3A | Integrate, regression-test, externalize assets, and investigate responsiveness | UI integration and regression passed; worker extraction did not remove the frame stall | [`verify_interaction.mjs`](../frontend/verify_interaction.mjs), [`vite.config.js`](../frontend/vite.config.js) |
+| F3B and public deployment | Publish immutable assets and deploy the frontend | Vercel Blob asset publication established the final hosting contract; the supplied production URL is now the public demo | [`upload_vercel_blob.py`](../experiments/browser-feasibility/upload_vercel_blob.py), [`scene-graph-v1-asset-manifest.json`](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json) |
+| F3B and public deployment | Publish immutable assets and deploy the frontend | Vercel Blob asset publication established the final hosting contract; the supplied production URL is now the public demo | [`upload_vercel_blob.py`](../experiments/browser-feasibility/upload_vercel_blob.py), [`scene-graph-v1-asset-manifest.json`](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json) |
 
 ## 3. Origins: Visual Genome and the scene-graph representation
 
@@ -266,21 +266,40 @@ The current public application is served at [scene-graph.vercel.app](https://sce
 3. **No claim of complete mobile verification.** The evidence focuses on local Chrome; Edge, mobile, low-memory devices, and broad hardware/provider coverage remain incomplete.
 4. **First use is large and slow.** The manifest totals 312,280,662 bytes, including approximately 220 MiB for the three ONNX models, before considering runtime downloads/caching conditions.
 5. **WASM is a functional fallback, not equivalent performance.** It can be substantially slower than a successful WebGPU path.
-6. **The legacy Python/FastAPI/OCI materials remain reproducibility history.** They are not the current production inference path and should not be presented as such.
+6. **The Python/FastAPI reference remains retained, while the Docker/OCI deployment route was retired on October 22, 2026.** The retained backend is useful for local research and regression reference; it is not the current production inference path.
 
-## 10. Retained source trail
+## 10. Consolidated historical record
 
-This history is synthesized from, rather than a replacement for, the following retained evidence:
+### Training and model-contract decisions
 
-- [Training workflow](../scene_graph_relationship_training_workflow.md)
-- [Post-training full-stack development log](../post_training_full_stack.md)
-- [Deployment audit](../DEPLOYMENT_AUDIT.md)
-- [Browser-feasibility reports](../experiments/browser-feasibility/)
+- The relationship model was trained against Visual Genome's 150 object categories and 50 predicate categories, with a 51-way output that includes a no-relationship class. The live checkpoint convention is authoritative: model classes `0..49` map to predicate IDs `1..50`, while class `50` means `no relationship`. This corrects an early workflow document that described class `0` as no relationship; [`scene_graph/mapping.py`](../scene_graph/mapping.py) enforces the verified convention.
+- The selected full-fusion checkpoint followed 30-epoch training and combines raw 512-D CLIP visual features, two 64-D object-label embeddings, and 8-D geometry. The core lesson was that label-ID domains—YOLO order, Visual Genome IDs, embedding indices, predicate IDs, and model outputs—must not be conflated.
+- The Python pipeline was deliberately validated incrementally: cached features, ground-truth objects, detector outputs, directed pairs, batched visual features, postprocessing, and finally scene JSON. The retained Python tests preserve those reference checks without requiring the retired deployment path.
+
+### Browser export, parity, and optimization decisions
+
+- The first official YOLO-World ONNX export failed on non-factor `adaptive_max_pool2d([3,3])`. An export-only static regional-max replacement for the three fixed `640×640` feature-map shapes unblocked a self-contained detector graph without changing the checkpoint, vocabulary, or runtime Python source.
+- An apparent large raw-box discrepancy was later traced to Ultralytics NMS mutating raw box channels from `xywh` to `xyxy` in place. Under correctly ordered, identical-input comparison, the static ONNX detector matched the freshly configured export-state reference; this result does not prove equivalence to the Python server's normal rectangular-letterbox route.
+- Chrome executed the detector, visual encoder, and relationship MLP with ONNX Runtime Web. Saved Python tensors established close component runtime parity, but browser image decode, resize, crop, and provider behavior prevented a universal Python/browser numerical-parity claim.
+- Exact union-crop deduplication is retained because it materially reduces repeated CLIP work. INT8 visual CLIP changed predicate and retention decisions on the recorded fixture and was rejected as a transparent substitution. The repaired FP16 visual graph halved model bytes and preserved fixture decisions, but remains a WebGPU-preferred optimization with an FP32 fallback rather than an unconditional equivalence claim.
+
+### Retired Docker/OCI deployment record
+
+The former OCI design packaged the retained FastAPI/Python reference pipeline in a single-worker, CPU-only container. It selected architecture-specific CPU dependency pins, baked Visual Genome metadata/checkpoints and public CLIP artifacts into the image, forced offline cache use, and avoided multi-worker memory duplication. Measurements and the deployment audit showed why it was not adopted as the public path: model loading could take roughly 45–120 seconds, synchronous inference roughly 6–9 seconds, and each additional worker would duplicate a multi-gigabyte ML process. The public Vercel architecture eliminates that server dependency by moving inference to the visitor's browser.
+
+On October 22, 2026, the tracked root Dockerfile, Docker ignore rules, deployment requirements, and Docker-only prefetch helpers were retired. This was a repository-simplification decision, not deletion of the Python reference backend or ML pipeline. Untracked OCI deployment work remains outside this change and requires separate approval before it is altered or revived.
+
+## 11. Retained source trail
+
+This history is the consolidated record for the retired reports. The following retained source, test, script, and manifest files provide implementation-level evidence:
+
 - [Python reference pipeline](../scene_graph/pipeline.py)
 - [Mapping safeguards](../scene_graph/mapping.py)
 - [Relationship model definition](../notebook/models/relationship/model.py)
+- [Retained Python reference tests](../tests/)
 - [Browser inference service](../frontend/src/services/browserInference.js)
 - [Browser preprocessing worker](../frontend/src/services/inferenceWorker.js)
+- [Detector export/parity scripts](../experiments/browser-feasibility/)
 - [Immutable asset manifest](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json)
 
 For an implementation-oriented explanation of the final public system, see [Architecture and Reproducibility](ARCHITECTURE_AND_REPRODUCIBILITY.md).

@@ -19,9 +19,10 @@ Relationship model output class
 
 IMPORTANT - "no relationship" is model class 50, NOT class 0
 -----------------------------------------------------------
-The task brief and ``scene_graph_relationship_training_workflow.md``
-describe class 0 as "no relationship".  That does NOT match the trained
-model in this repository.  Verified facts:
+An early training-workflow report described class 0 as "no relationship".
+That does NOT match the trained model in this repository; the consolidated
+historical record in ``docs/DEVELOPMENT_JOURNEY.md`` preserves the correction.
+Verified facts:
 
 * The cache shards store negative (no-relationship) samples with the
   internal predicate id 51, i.e. target = 51 - 1 = 50

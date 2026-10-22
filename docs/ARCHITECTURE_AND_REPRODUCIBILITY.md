@@ -429,14 +429,14 @@ Validation was incremental and layered rather than relying on one end-to-end scr
 
 | Layer | What was checked | Key evidence |
 |---|---|---|
-| Python reference | Mapping, detector, pair features, model pipeline, API behavior | [`scene_graph/`](../scene_graph/), [`post_training_full_stack.md`](../post_training_full_stack.md) |
-| Detector export | Static ONNX graph and identical-input Python ORT parity | [B1.1/B1.2 reports](../experiments/browser-feasibility/02-b1-2-yoloworld-raw-parity-investigation.md) |
-| Browser component execution | Real Chrome ONNX session creation and `session.run()` for YOLO, CLIP, and MLP | [C1](../experiments/browser-feasibility/03-c1-yoloworld-browser-runtime.md), [B2](../experiments/browser-feasibility/04-b2-clip-browser-feasibility.md), [B3](../experiments/browser-feasibility/05-b3-relationship-mlp-browser-feasibility.md) |
-| Optimization safety | Feature/probability and retained-edge decision changes across FP32/INT8/FP16 | [D1](../experiments/browser-feasibility/06-browser-model-performance.md), [D1.1](../experiments/browser-feasibility/08-fp16-clip-final-validation.md) |
-| End-to-end browser path | Five image fixtures, WebGPU repeat, WASM fallback, no server inference fallback | [E1](../experiments/browser-feasibility/09-end-to-end-browser-pipeline.md) |
-| Parity boundary | Browser preprocessing and static detector comparisons against saved references | [E2](../experiments/browser-feasibility/10-e2-browser-preprocessing-parity.md) |
-| UI regression | Upload/repeat state, overlays, graph, inspector, selection, visibility, error behavior | [F2](../experiments/browser-feasibility/13-f2-frontend-validation.md) |
-| Deployment boundary | External origin simulation, CORS/MIME/ORT imports, immutable asset manifest | [F3A](../experiments/browser-feasibility/14-f3a-deployment-preparation.md), [F3B](../experiments/browser-feasibility/15-f3b-vercel-deployment.md) |
+| Python reference | Mapping, detector, pair features, model pipeline, API behavior | [`scene_graph/`](../scene_graph/), retained [`tests/`](../tests/) |
+| Detector export | Static ONNX graph and identical-input Python ORT parity | [`run_b1_1_yoloworld_export_resolution.py`](../experiments/browser-feasibility/run_b1_1_yoloworld_export_resolution.py), [`run_b1_2_yoloworld_raw_parity_investigation.py`](../experiments/browser-feasibility/run_b1_2_yoloworld_raw_parity_investigation.py) |
+| Browser component execution | Real Chrome ONNX session creation and `session.run()` for YOLO, CLIP, and MLP | [`browser-yolo-test`](../experiments/browser-feasibility/browser-yolo-test/), [`run_b2_b3_clip_relationship_export.py`](../experiments/browser-feasibility/run_b2_b3_clip_relationship_export.py) |
+| Optimization safety | Feature/probability and retained-edge decision changes across FP32/INT8/FP16 | [`browserInference.js`](../frontend/src/services/browserInference.js), immutable asset manifest |
+| End-to-end browser path | Five image fixtures, WebGPU repeat, WASM fallback, no server inference fallback | [`inferenceWorker.js`](../frontend/src/services/inferenceWorker.js), frontend static verifiers |
+| Parity boundary | Browser preprocessing and static detector comparisons against saved references | Documented limitations in sections 15 and 17 of this guide |
+| UI regression | Upload/repeat state, overlays, graph, inspector, selection, visibility, error behavior | [`frontend/verify_interaction.mjs`](../frontend/verify_interaction.mjs) and related static verifiers |
+| Deployment boundary | External origin simulation, CORS/MIME/ORT imports, immutable asset manifest | [`upload_vercel_blob.py`](../experiments/browser-feasibility/upload_vercel_blob.py), [`scene-graph-v1-asset-manifest.json`](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json) |
 
 No test result should be generalized beyond its documented environment. In particular, the recorded browser studies used Chrome on a local Windows host; they do not establish device-independent latency, universal WebGPU behavior, or full mobile support.
 
@@ -475,7 +475,18 @@ These checkpoints and datasets are deliberate reproducibility/artifact-retention
 6. **No complete browser-memory claim.** Measured Chrome runs did not provide usable numeric `performance.memory` values.
 7. **No implicit server fallback.** The public frontend does not send `/analyze` requests for inference. If browser capabilities or asset loading fail, the app reports an error rather than silently switching to a Python service.
 
-## 16. Security and privacy considerations
+## 16. Consolidated experiment and deployment decisions
+
+The raw feasibility and deployment reports were consolidated into this guide and the [Development Journey](DEVELOPMENT_JOURNEY.md) on October 22, 2026. The implementation and artifacts remain the evidence; the following is the retained decision record.
+
+1. **Detector export is static and deliberately constrained.** The original export path failed on `adaptive_max_pool2d([3,3])`. The retained export script uses an exact export-only replacement for the three known static feature-map shapes, yielding a batch-one `640×640` graph. The model checkpoint, VG150 vocabulary, production detector wrapper, thresholds, and source Python pipeline were not changed.
+2. **Raw parity requires representation-aware comparison.** Ultralytics NMS mutates raw detector boxes from `xywh` to `xyxy`; comparisons made after that mutation are not raw-output comparisons. Identical-input Python/export-state ONNX checks passed after controlling that order. This does not establish equivalence to the retained Python route's normal rectangular-letterbox preprocessing.
+3. **All three components executed in Chrome, but browser/Python equivalence remains bounded.** Detector, visual encoder, and relationship MLP sessions ran in browser ONNX Runtime. Saved preprocessed tensors showed close runtime behavior, while real browser decode, resize, crop, and provider differences changed some detector candidates and/or downstream results. The production browser route therefore preserves the model contract without claiming universal numerical equality to Python.
+4. **Optimization is decision-sensitive.** Exact pixel-crop deduplication is retained. INT8 visual CLIP was not adopted because its recorded fixture changed predicate and relationship-retention decisions. The FP16 visual encoder reduced the model from 351,780,080 bytes to 176,081,784 bytes and preserved the recorded fixture's decisions, but it remains a WebGPU-preferred path with WASM/FP32 compatibility considerations, not a blanket equivalence guarantee.
+5. **Performance and responsiveness are accepted limitations.** The measured browser workload was functional but can require substantial model downloads and multi-second work. Moving decode/crop/postprocessing work into a worker did not eliminate the measured approximately six-second maximum animation-frame gap because ONNX Runtime/session/provider work remained significant on the measured host.
+6. **The Docker/OCI deployment route is retired, not the reference pipeline.** The old single-worker CPU image baked model artifacts and offline caches to avoid network startup dependency, but its measured 45–120 second model-load and 6–9 second synchronous-inference behavior was unsuitable for the public service direction. On October 22, 2026, the tracked Dockerfile, Docker ignore rules, deployment requirements, and Docker-only prefetch scripts were removed. `backend/` and the Python ML reference pipeline remain for historical/local reproducibility. Untracked OCI material is intentionally outside this cleanup and cannot be assumed operational after the Docker retirement.
+
+## 17. Security and privacy considerations
 
 - **Image privacy:** inference is intended to run locally in the browser. The production frontend does not post uploaded image bytes to the historical FastAPI `/analyze` endpoint.
 - **Public assets:** ONNX models, mappings, and ONNX Runtime files are public static assets. Their Blob base URL is not a secret.
@@ -484,7 +495,7 @@ These checkpoints and datasets are deliberate reproducibility/artifact-retention
 - **Legacy server exposure:** the historical FastAPI/OCI route accepted uploads and required normal API hardening decisions such as CORS restriction and abuse controls. Those concerns remain relevant if that route is revived, but they are not part of the browser-only production inference path.
 - **Repository hygiene:** the cleanup audit identified an ignored root private-key file requiring separate ownership/exposure review. This documentation intentionally does not inspect or reproduce any secret material.
 
-## 17. Operational reference links
+## 18. Operational reference links
 
 - [Development journey](DEVELOPMENT_JOURNEY.md)
 - [Browser asset manifest](../experiments/browser-feasibility/scene-graph-v1-asset-manifest.json)
