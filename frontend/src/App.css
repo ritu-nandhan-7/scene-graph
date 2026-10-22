@@ -989,6 +989,127 @@ body {
   color: #6b7c93;
 }
 
+/* ---------------- project overview ---------------- */
+
+.project-overview-section {
+  margin-top: 28px;
+}
+
+.project-overview {
+  border-top: 1px solid #1c2533;
+  border-bottom: 1px solid #1c2533;
+}
+
+.project-overview summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 2px;
+  color: #cbd5e1;
+  cursor: pointer;
+  list-style: none;
+}
+
+.project-overview summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-overview summary:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.project-overview-summary-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-overview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #dbe7f5;
+}
+
+.project-overview-subtitle {
+  font-size: 12px;
+  color: #6b7c93;
+}
+
+.project-overview-indicator {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-right: 4px;
+  border-right: 1.5px solid #8ea1ba;
+  border-bottom: 1.5px solid #8ea1ba;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+
+.project-overview[open] .project-overview-indicator {
+  transform: rotate(225deg) translate(-2px, 0);
+}
+
+.project-overview-content {
+  max-width: 900px;
+  padding: 4px 2px 22px;
+  color: #a9bacd;
+}
+
+.project-overview-content section + section {
+  margin-top: 20px;
+}
+
+.project-overview-content h2 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #dbe7f5;
+}
+
+.project-overview-content p,
+.project-overview-content ol,
+.project-overview-content ul {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.project-overview-content ol,
+.project-overview-content ul {
+  padding-left: 20px;
+}
+
+.project-overview-content li + li {
+  margin-top: 3px;
+}
+
+.project-overview-content .project-overview-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 22px;
+}
+
+.project-overview-links a {
+  color: #70a7f5;
+  text-decoration: none;
+}
+
+.project-overview-links a:hover {
+  color: #9bc2ff;
+  text-decoration: underline;
+}
+
+.project-overview-links a:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Track-only variant of the shared toggle (no text label next to it). */
 .toggle-compact {
   gap: 0;
@@ -1026,5 +1147,17 @@ body {
 
   .inspector-list {
     grid-template-columns: 1fr;
+  }
+
+  .project-overview-section {
+    margin-top: 24px;
+  }
+
+  .project-overview summary {
+    align-items: flex-start;
+  }
+
+  .project-overview-indicator {
+    margin-top: 6px;
   }
 }

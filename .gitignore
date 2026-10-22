@@ -34,6 +34,10 @@ env/
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Test caches (Deployment Phase 1)
 .pytest_cache/
@@ -51,9 +55,16 @@ tests/_sweep2.txt
 
 # Local build, coverage, and Vercel-link metadata
 dist/
+frontend/dist/
+frontend/.vite/
 build/
 coverage/
 .vercel/
+
+# Temporary local files
+*.tmp
+*.temp
+*.bak
 
 # OS Files
 .DS_Store

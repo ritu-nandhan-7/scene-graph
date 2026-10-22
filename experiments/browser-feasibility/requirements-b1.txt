@@ -1,0 +1,5 @@
+# Phase B1 only: required to use Ultralytics' official ONNX exporter and
+# validate the resulting artifact with the Python ONNX Runtime reference path.
+# This file intentionally does not modify production dependency manifests.
+onnx
+onnxruntime

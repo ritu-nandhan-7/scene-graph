@@ -321,7 +321,7 @@ export default function App() {
             and the image and graph stay linked - click a box, a node or an edge to inspect it.
           </p>
           <p className="browser-ai-notice">
-            AI models run directly in your browser. The first analysis may take a while as models download and initialize. Processing may temporarily slow the page.
+            Models run directly in your browser. The first analysis may take a while as models download and initialize. Processing may temporarily slow the page.
           </p>
           <button
             type="button"
@@ -341,7 +341,7 @@ export default function App() {
             <p className="loading-text">{analysisProgress?.stage || 'Analyzing image…'}</p>
             {analysisProgress?.detail && <p className="loading-detail">{analysisProgress.detail}</p>}
             <p className="browser-ai-notice loading-notice">
-              AI models run directly in your browser. Processing may temporarily slow the page.
+              Models run directly in your browser. Processing may temporarily slow the page.
             </p>
             {selectedFile && <p className="loading-file">{selectedFile.name}</p>}
           </div>
@@ -353,7 +353,7 @@ export default function App() {
           <img src={previewUrl} alt="Selected" className="preview-image" />
           {selectedFile && <p className="file-name">{selectedFile.name}</p>}
           <p className="browser-ai-notice">
-            AI models run directly in your browser. The first analysis may take a while as models download and initialize. Processing may temporarily slow the page.
+            Models run directly in your browser. The first analysis may take a while as models download and initialize. Processing may temporarily slow the page.
           </p>
           <button type="button" className="btn btn-primary" onClick={handleAnalyze}>
             Run analysis
@@ -478,6 +478,99 @@ export default function App() {
           />
         </section>
       )}
+
+      <section className="project-overview-section" aria-label="Project overview">
+        <details className="project-overview">
+          <summary>
+            <span className="project-overview-summary-text">
+              <span className="project-overview-title">About Scene Graph Explorer</span>
+              <span className="project-overview-subtitle">
+                How it works, browser inference, and technical architecture
+              </span>
+            </span>
+            <span className="project-overview-indicator" aria-hidden="true" />
+          </summary>
+
+          <div className="project-overview-content">
+            <section>
+              <h2>What is Scene Graph Explorer?</h2>
+              <p>
+                Scene Graph Explorer converts an uploaded image into a structured scene graph. It
+                detects objects, predicts semantic relationships between them, and lets you explore
+                the result through image overlays and an interactive graph.
+              </p>
+            </section>
+
+            <section>
+              <h2>How does it work?</h2>
+              <ol>
+                <li>YOLO-World detects objects in the image.</li>
+                <li>Candidate directed pairs of detected objects are generated.</li>
+                <li>CLIP extracts visual embeddings from each object-pair region.</li>
+                <li>A trained relationship classifier predicts semantic relationships.</li>
+                <li>React Flow renders the resulting interactive scene graph.</li>
+              </ol>
+            </section>
+
+            <section>
+              <h2>Why browser-side inference?</h2>
+              <p>
+                The original system used Python, PyTorch, and FastAPI, but a persistent inference
+                backend was resource-intensive to host. The public application uses exported ONNX
+                models with ONNX Runtime Web, so inference runs on your device and uploaded images
+                are not sent to the former FastAPI inference backend. Vercel serves the frontend,
+                while Vercel Blob serves the model and runtime files.
+              </p>
+            </section>
+
+            <section>
+              <h2>WebGPU and WebAssembly</h2>
+              <p>
+                WebAssembly (WASM) runs compatible inference workloads on the CPU. WebGPU can use
+                supported GPU hardware. The CLIP model prefers WebGPU when available and falls back
+                to WASM when it is not.
+              </p>
+            </section>
+
+            <section>
+              <h2>Model loading and caching</h2>
+              <p>
+                The initial hosted asset download is substantial—approximately 300 MB. Your browser
+                may reuse cached model files on later visits, but cache storage is not guaranteed
+                permanent and cached files are not kept loaded in RAM. Active inference sessions do
+                use device memory.
+              </p>
+            </section>
+
+            <section>
+              <h2>Limitations</h2>
+              <ul>
+                <li>First-run model downloads and initialization can take time.</li>
+                <li>Inference speed depends on your device hardware and browser support.</li>
+                <li>Heavy inference can temporarily stall the interface.</li>
+                <li>Mobile support has not been comprehensively validated.</li>
+              </ul>
+            </section>
+
+            <p className="project-overview-links">
+              <a
+                href="https://github.com/ritu-nandhan-7/scene-graph"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Project README
+              </a>
+              <a
+                href="https://github.com/ritu-nandhan-7/scene-graph/blob/main/docs/ARCHITECTURE_AND_REPRODUCIBILITY.md"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Architecture documentation
+              </a>
+            </p>
+          </div>
+        </details>
+      </section>
     </div>
   )
 }

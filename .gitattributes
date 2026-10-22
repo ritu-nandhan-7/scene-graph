@@ -1,0 +1,8 @@
+# Shell scripts and container build/config files must stay LF on EVERY
+# platform: bash fails on CRLF (`\r` at end of `f() {` lines) and Dockerfile
+# line continuations (`\`) break when followed by CRLF. This overrides
+# core.autocrlf=true on Windows checkouts.
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+Dockerfile.*  text eol=lf
+deploy/**     text eol=lf

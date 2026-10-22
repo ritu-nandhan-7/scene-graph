@@ -1,0 +1,3 @@
+@echo off
+cd /d "C:\Users\psytr\Desktop\Projects\scene_graph"
+"C:\Users\psytr\Desktop\Projects\scene_graph\.venv\Scripts\python.exe" "C:\Users\psytr\Desktop\Projects\scene_graph\experiments\browser-feasibility\run_b1_1_yoloworld_export_resolution.py"
